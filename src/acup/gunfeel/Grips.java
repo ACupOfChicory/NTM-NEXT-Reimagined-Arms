@@ -41,7 +41,22 @@ public final class Grips {
     }
 
     public static Grip get(Identifier id) {
-        String key = id.toString();
+        return get(id, "");
+    }
+
+    // A variant of the gun (missing = the model parts it does not draw, e.g. "-Barrel" for a sawn-off) may
+    // have its own hand positions: "<gun id>-Barrel.leftAt"; each hand falls back to the gun's own.
+    public static Grip get(Identifier id, String missing) {
+        String base = id.toString(), own = base + missing;
+        Grip b = read(base);
+        if (missing.isEmpty()) return b;
+        Grip v = read(own);
+        boolean vr = VALUES.containsKey(own + ".right") || VALUES.containsKey(own + ".rightAt");
+        boolean vl = VALUES.containsKey(own + ".left") || VALUES.containsKey(own + ".leftAt");
+        return new Grip(vr ? v.right() : b.right(), vl ? v.left() : b.left(), vr ? v.rightAt() : b.rightAt(), vl ? v.leftAt() : b.leftAt());
+    }
+
+    private static Grip read(String key) {
         float[] r = vec(VALUES.get(key + ".right")), l = vec(VALUES.get(key + ".left"));
         return new Grip(r != null ? r : DEFAULT.right(), l != null ? l : DEFAULT.left(), vec(VALUES.get(key + ".rightAt")),
                 vec(VALUES.get(key + ".leftAt")));

@@ -50,7 +50,7 @@
 - [ ] **Folly** — точки: Пушка "Folly" (`gun_folly`)
 - [ ] **Aberrator** — точки: Пистолет "Aberrator" (`gun_aberrator`)
 - [ ] **NI4NI** — точки: Энергетический револьвер "N I 4 N I" (`gun_n_i_4_n_i`)
-- [ ] **DoubleBarrel** — по умолчанию: Двуствольный дробовик "Old Classic" (`gun_double_barrel`), Двуствольный дробовик "Sacred Dragon" (`gun_double_barrel_sacred_dragon`)
+- [x] **DoubleBarrel** — настроен, обрез (hacksaw) и Sacred Dragon тоже: левая рука обходит стволы и открывает/закрывает их, правая вставляет гильзы, у обреза своя точка левой руки: Двуствольный дробовик "Old Classic" (`gun_double_barrel`), Двуствольный дробовик "Sacred Dragon" (`gun_double_barrel_sacred_dragon`)
 
 ## Без рук (акимбо / ближний бой)
 

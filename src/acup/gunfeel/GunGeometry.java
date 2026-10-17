@@ -18,6 +18,8 @@ public final class GunGeometry {
     // the parts NTM draws for this variant of the gun (a sawn-off draws fewer than the full gun)
     public final BitSet parts;
     public final int variant;
+    // the model parts this variant does not draw, "-Barrel-Stock" ("" = all drawn): names the variant in the grip file
+    public final String missing;
     public float minX, minY, minZ, maxX, maxY, maxZ;
     // the part that carries the gun's body: the biggest one (others may move in animations)
     public int bodyPart = -1;
@@ -34,6 +36,9 @@ public final class GunGeometry {
         this.parts = parts;
         this.variant = variant;
         this.partRest = new Matrix4f[model.groups.length];
+        StringBuilder name = new StringBuilder();
+        for (int p = 0; p < model.groups.length; p++) if (!parts.get(p)) name.append('-').append(model.groups[p].name);
+        this.missing = name.toString();
         float best = -1F;
         for (int p = parts.nextSetBit(0); p >= 0; p = parts.nextSetBit(p + 1)) {
             float[] b = model.groups[p].bounds();
@@ -140,6 +145,11 @@ public final class GunGeometry {
         float[] s = section(g[2], Math.max(length() * 0.04F, 1e-3F));
         float half = s != null ? (s[1] - s[0]) * 0.5F : 0F;
         return new float[] {g[0], g[1] + half, g[2]};
+    }
+
+    // cross-section of the gun around z: {minX, maxX, minY, maxY}, or null where there is none
+    public float[] sectionAt(float z) {
+        return section(z, Math.max(length() * 0.04F, 1e-3F));
     }
 
     // null when no geometry lies within bandFrac * length of that z

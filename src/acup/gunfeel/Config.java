@@ -57,6 +57,11 @@ public final class Config {
     // NTM animation bus (an angle, like Maresleg's FLIP) during which the left hand lets go of the gun
     public static String armReleaseLeft = "";
     public static float[] armReleaseMove = {4F, 0F, 0F};
+    // left hand moves around the held part in an animation: "RELOAD 0:-90 240:90 ...; INSPECT ..."
+    public static String armLeftKeys = "";
+    // right hand carries something NTM animates (Old Classic's new shells): "<part> <bus> <grab ms> x,y,z"
+    public static String armRightCarry = "";
+    public static String armRightCarryKeys = "";
 
     private static final String HEADER = """
             NTM Gun Feel. Saved values are re-read while the game runs.
@@ -87,6 +92,13 @@ public final class Config {
             armPartRight, armPartLeft: model part the hand moves with (a pump: SPAS-12 PumpGrip), empty = the gun's body
             armReleaseLeft: NTM animation bus (a turn angle) during which the left hand lets go (sawn-off Maresleg: FLIP), empty = never
             armReleaseMove: where the released left hand moves and back, arm pixels: x (+ left), y (+ up), z (+ forward)
+            armLeftKeys: the left hand goes around the part it holds during NTM animations, per animation:
+              "RELOAD 0:-90 240:90 1250:90 1500:-90; INSPECT ..." = milliseconds:angle, angle around the part
+              (-90 under, 0 the gun's left side, 90 on top, 180 right side); empty = the hand stays put
+            armRightCarry: the right hand carries something an NTM animation bus moves, "<part> <bus> <grab ms> x,y,z":
+              the bus moves it within that part, the hand holds point x,y,z (from behind), and before the grab time
+              it reaches for where the thing will be then (Old Classic: "BarrelShort SHELLS 900 0,0,-1.75")
+            armRightCarryKeys: how much the right hand is on the carried thing, per animation: "RELOAD 650:0 900:1 1300:1 1500:0"
             Every value except enabled can be overridden per gun in config/ntm-gunfeel-guns.properties
             (hbm\\:gun_maresleg.armRollLeft = -55) or with /gunfeel set <key> <value> for the held gun.
             Hand positions per gun: <gun>.right / <gun>.left there, or /gunfeel grip""";
@@ -189,6 +201,9 @@ public final class Config {
         armPartLeft = p.getProperty("armPartLeft", armPartLeft).trim();
         armReleaseLeft = p.getProperty("armReleaseLeft", armReleaseLeft).trim();
         armReleaseMove = vec(p, "armReleaseMove", armReleaseMove);
+        armLeftKeys = p.getProperty("armLeftKeys", armLeftKeys).trim();
+        armRightCarry = p.getProperty("armRightCarry", armRightCarry).trim();
+        armRightCarryKeys = p.getProperty("armRightCarryKeys", armRightCarryKeys).trim();
     }
 
     private static Properties snapshot() {
@@ -233,6 +248,9 @@ public final class Config {
         p.setProperty("armPartLeft", armPartLeft);
         p.setProperty("armReleaseLeft", armReleaseLeft);
         p.setProperty("armReleaseMove", armReleaseMove[0] + "," + armReleaseMove[1] + "," + armReleaseMove[2]);
+        p.setProperty("armLeftKeys", armLeftKeys);
+        p.setProperty("armRightCarry", armRightCarry);
+        p.setProperty("armRightCarryKeys", armRightCarryKeys);
         return p;
     }
 

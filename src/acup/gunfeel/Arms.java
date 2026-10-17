@@ -2,6 +2,7 @@ package acup.gunfeel;
 
 import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -69,9 +70,10 @@ public final class Arms {
     private static int gripVersion = -1;
 
     // pose of the part each hand moves with (armPartRight / armPartLeft), this frame
-    private static final Matrix4f[] FOLLOW = {new Matrix4f(), new Matrix4f()};
-    private static final boolean[] HAVE_FOLLOW = new boolean[2];
-    private static final int[] FOLLOW_ID = {-1, -1};
+    // [2]: the part the right hand carries things within (armRightCarry)
+    private static final Matrix4f[] FOLLOW = {new Matrix4f(), new Matrix4f(), new Matrix4f()};
+    private static final boolean[] HAVE_FOLLOW = new boolean[3];
+    private static final int[] FOLLOW_ID = {-1, -1, -1};
 
     // the parts NTM drew this frame (of the first model it drew) and where
     private static final int MAX_PARTS = 128;
@@ -99,8 +101,8 @@ public final class Arms {
         haveCamera = false;
         frameModel = null;
         frameParts = 0;
-        HAVE_FOLLOW[0] = HAVE_FOLLOW[1] = false;
-        FOLLOW_ID[0] = FOLLOW_ID[1] = -1;
+        HAVE_FOLLOW[0] = HAVE_FOLLOW[1] = HAVE_FOLLOW[2] = false;
+        FOLLOW_ID[0] = FOLLOW_ID[1] = FOLLOW_ID[2] = -1;
         capturing = true;
     }
 
@@ -126,6 +128,7 @@ public final class Arms {
             frameModel = model;
             FOLLOW_ID[0] = partByName(model, Config.armPartRight);
             FOLLOW_ID[1] = partByName(model, Config.armPartLeft);
+            FOLLOW_ID[2] = partByName(model, carry().part);
         }
         if (model != frameModel) return;
         if (frameParts < MAX_PARTS) {
@@ -133,7 +136,7 @@ public final class Arms {
             FRAME_POSE[frameParts].set(pose.last().pose());
             FRAME_PART[frameParts++] = part;
         }
-        for (int i = 0; i < 2; i++) {
+        for (int i = 0; i < 3; i++) {
             if (!HAVE_FOLLOW[i] && FOLLOW_ID[i] >= 0 && part == FOLLOW_ID[i]) {
                 FOLLOW[i].set(pose.last().pose());
                 HAVE_FOLLOW[i] = true;
@@ -192,7 +195,7 @@ public final class Arms {
         // model space -> the gun's aligned frame (a whole-quarter-turn rotation: its inverse is its transpose)
         Matrix4f fromAligned = new Matrix4f().set(new org.joml.Matrix3f(geometry.toAligned).transpose());
         BODY.mul(fromAligned);
-        for (int i = 0; i < 2; i++) if (HAVE_FOLLOW[i]) FOLLOW[i].mul(fromAligned);
+        for (int i = 0; i < 3; i++) if (HAVE_FOLLOW[i]) FOLLOW[i].mul(fromAligned);
         REL.set(KICKED).invert().mul(BODY);
         haveRel = true;
         relItem = item;
@@ -227,7 +230,7 @@ public final class Arms {
             gripVersion = Grips.version();
         }
         return GRIP_CACHE.computeIfAbsent(geometry(held), geo -> {
-            Grips.Grip g = Grips.get(BuiltInRegistries.ITEM.getKey(held));
+            Grips.Grip g = Grips.get(BuiltInRegistries.ITEM.getKey(held), geo.missing);
             float[] r = g.rightAt() != null ? g.rightAt() : geo.grip(g.right());
             float[] l = g.leftAt() != null ? g.leftAt() : geo.grip(g.left());
             return new float[][] {r, l, geo.holdCenter(r), geo.holdCenter(l)};
@@ -241,7 +244,7 @@ public final class Arms {
     private static float[][][] profiles(Item held) {
         grips(held); // keeps the caches in step with the grip file
         return PROFILE_CACHE.computeIfAbsent(geometry(held), geo -> {
-            Grips.Grip g = Grips.get(BuiltInRegistries.ITEM.getKey(held));
+            Grips.Grip g = Grips.get(BuiltInRegistries.ITEM.getKey(held), geo.missing);
             float[] r = g.rightAt() != null ? geo.fractions(g.rightAt()) : g.right();
             float[] l = g.leftAt() != null ? geo.fractions(g.leftAt()) : g.left();
             return new float[][][] {geo.profile(r[0], r[1], PROFILE_STEPS), geo.profile(l[0], l[1], PROFILE_STEPS)};
@@ -328,6 +331,22 @@ public final class Arms {
             }
             // a hand on a moving part (a pump) goes along with that part
             Matrix4f holder = HAVE_FOLLOW[i] ? new Matrix4f(cameraInv).mul(FOLLOW[i]) : bodyInCamera;
+            // scripted: the left hand goes around the part it holds (over a break-action's barrels to open them)
+            float around = right ? Float.NaN : leftAngle();
+            if (!Float.isNaN(around)) {
+                float[] sec = geometry.sectionAt(grip[i][2]);
+                if (sec != null) {
+                    float a = (float) Math.toRadians(around), c = (float) Math.cos(a), sn = (float) Math.sin(a);
+                    float cx = (sec[0] + sec[1]) * 0.5F, cy = (sec[2] + sec[3]) * 0.5F;
+                    Vector3f g = holder.transformPosition(cx + (sec[1] - sec[0]) * 0.5F * c, cy + (sec[3] - sec[2]) * 0.5F * sn, grip[i][2], new Vector3f());
+                    Vector3f out = holder.transformDirection(new Vector3f(c, sn, 0F)).normalize();
+                    // back under the gun (e.g. as it is flicked up to close) the hand slides along it like at rest
+                    boolean under = Math.abs(around + 90F) < 0.5F;
+                    arm(collector, light, arm, skin, slim, right, g, under ? profiles(item)[i] : null, geometry.fraction(grip[i][2]), holder, out, g, false,
+                            new Quaternionf(), 0F, axisPoint, r, sleeveShown, sleeve);
+                    continue;
+                }
+            }
             Vector3f g = holder.transformPosition(grip[i][0], grip[i][1], grip[i][2], new Vector3f());
             float[][] path = profiles(item)[i];
             Vector3f center = holder.transformPosition(grip[i + 2][0], grip[i + 2][1], grip[i + 2][2], new Vector3f());
@@ -338,9 +357,124 @@ public final class Arms {
             // surface; a hand that follows less of the roll shows the gun turning inside it.
             Quaternionf own = new Quaternionf().slerp(twist, right ? followRight : followLeft).normalize();
             if (!Float.isFinite(own.x + own.y + own.z + own.w)) own.identity();
+            // the right hand leaves the grip to carry something (new shells into the chambers) and comes back
+            float carry = right ? keyValue(Config.armRightCarryKeys, 1) : Float.NaN;
+            if (carry > 0F && HAVE_FOLLOW[2]) {
+                Matrix4f within = new Matrix4f(cameraInv).mul(FOLLOW[2]);
+                Vector3f at = within.transformPosition(carryPoint());
+                Vector3f behind = within.transformDirection(new Vector3f(0F, 0F, -1F)).normalize();
+                Vector3f p = new Vector3f(g).lerp(at, carry);
+                Vector3f off = new Vector3f(down).lerp(behind, carry);
+                if (off.lengthSquared() < 1e-6F) off.set(behind);
+                arm(collector, light, arm, skin, slim, right, p, null, gripF, bodyInCamera, off.normalize(), p, false, own, 0F, axisPoint, r, sleeveShown, sleeve);
+                continue;
+            }
             arm(collector, light, arm, skin, slim, right, g, path, gripF, bodyInCamera, down, center, spin, own,
                     inspect && !right ? Config.armInspectDrop : 0F, axisPoint, r, sleeveShown, sleeve);
         }
+    }
+
+    private static final String[] keysSource = new String[2];
+    @SuppressWarnings("unchecked")
+    private static final Map<String, float[]>[] keys = new Map[] {Map.of(), Map.of()};
+
+    // angle of the left hand around the part it holds at this moment of the animation (armLeftKeys), NaN = none
+    private static float leftAngle() {
+        return keyValue(Config.armLeftKeys, 0);
+    }
+
+    private static float animMillis() {
+        HbmAnimations.Animation anim = HbmAnimations.getRelevantAnim(0);
+        return anim == null ? 0F : com.hbm.util.GameTime.now() - anim.startMillis;
+    }
+
+    // value of time keys ("RELOAD 0:-90 240:90; ...") at this moment of the current animation, NaN = none
+    private static float keyValue(String src, int slot) {
+        if (src.isEmpty()) return Float.NaN;
+        HbmAnimations.Animation anim = HbmAnimations.getRelevantAnim(0);
+        GunAnimation type = HbmAnimations.getGunAnimation(0);
+        if (anim == null || type == null) return Float.NaN;
+        if (!src.equals(keysSource[slot])) {
+            keysSource[slot] = src;
+            keys[slot] = parseKeys(src);
+        }
+        float[] k = keys[slot].get(type.name());
+        if (k == null) return Float.NaN;
+        float t = animMillis();
+        if (t <= k[0]) return k[1];
+        for (int j = 2; j + 1 < k.length; j += 2) {
+            if (t < k[j]) {
+                float u = (t - k[j - 2]) / Math.max(k[j] - k[j - 2], 1F);
+                u = u * u * (3F - 2F * u);
+                return k[j - 1] + (k[j + 1] - k[j - 1]) * u;
+            }
+        }
+        return k[k.length - 1];
+    }
+
+    // "RELOAD 0:-90 240:90; INSPECT 0:-90" -> {RELOAD: [0,-90, 240,90], ...}; bad entries are skipped
+    private static Map<String, float[]> parseKeys(String src) {
+        Map<String, float[]> out = new HashMap<>();
+        for (String anim : src.split(";")) {
+            String[] w = anim.trim().split("\\s+");
+            if (w.length < 2) continue;
+            List<Float> v = new ArrayList<>();
+            for (int j = 1; j < w.length; j++) {
+                String[] tv = w[j].split(":");
+                if (tv.length != 2) continue;
+                try {
+                    float time = Float.parseFloat(tv[0]), angle = Float.parseFloat(tv[1]);
+                    if (!v.isEmpty() && time <= v.get(v.size() - 2)) continue;
+                    v.add(time);
+                    v.add(angle);
+                } catch (NumberFormatException e) {
+                    // skip
+                }
+            }
+            if (v.isEmpty()) continue;
+            float[] a = new float[v.size()];
+            for (int j = 0; j < a.length; j++) a[j] = v.get(j);
+            out.put(w[0].toUpperCase(java.util.Locale.ROOT), a);
+        }
+        return out;
+    }
+
+    private record Carry(String part, String bus, int grab, float[] at) {
+    }
+
+    private static String carrySource;
+    private static Carry carry = new Carry("", "", 0, new float[3]);
+
+    // armRightCarry: "<part> <bus> <grab ms> x,y,z"
+    private static Carry carry() {
+        if (!Config.armRightCarry.equals(carrySource)) {
+            carrySource = Config.armRightCarry;
+            carry = new Carry("", "", 0, new float[3]);
+            String[] w = carrySource.split("\\s+");
+            if (w.length == 4) {
+                try {
+                    String[] xyz = w[3].split(",");
+                    carry = new Carry(w[0], w[1], Integer.parseInt(w[2]),
+                            new float[] {Float.parseFloat(xyz[0]), Float.parseFloat(xyz[1]), Float.parseFloat(xyz[2])});
+                } catch (RuntimeException e) {
+                    // malformed: no carrying
+                }
+            }
+        }
+        return carry;
+    }
+
+    // The carried point within its part (aligned frame): the bus moves it; before the grab time the hand
+    // reaches for where it will be at that time instead of following what the bus does earlier.
+    private static Vector3f carryPoint() {
+        Carry c = carry();
+        Vector3f p = new Vector3f(c.at[0], c.at[1], c.at[2]);
+        HbmAnimations.Animation anim = HbmAnimations.getRelevantAnim(0);
+        if (anim == null) return p;
+        com.hbm.render.anim.BusAnimationSequence seq = anim.animation.getBus(c.bus);
+        double[] t = seq == null ? null : seq.getTransformation((int) Math.max(animMillis(), c.grab));
+        if (t == null) return p;
+        return p.add(geometry.toAligned.transform(new Vector3f((float) t[0], (float) t[1], (float) t[2])));
     }
 
     // progress (0..1) of the turn on the armReleaseLeft bus while the left hand is off the gun, else 0
@@ -452,7 +586,7 @@ public final class Arms {
         // the stock until the arm reaches it.
         float limit = length * (1F + Math.max(0F, Config.armStretch));
         Vector3f hand = handAtGrip;
-        if (Config.armSlide && handAtGrip.distance(shoulder) > limit) {
+        if (Config.armSlide && path != null && handAtGrip.distance(shoulder) > limit) {
             float lo = Math.min(Config.armSlideTo, gripF), hi = gripF;
             for (int k = 0; k < 16; k++) {
                 float mid = (lo + hi) * 0.5F;
