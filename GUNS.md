@@ -12,7 +12,7 @@
 - [ ] **HeavyRevolver** — точки: Тяжёлый револьвер (`gun_heavy_revolver`), Револьвер "Little Macintosh" (`gun_heavy_revolver_lilmac`), Револьвер "Protège" (`gun_heavy_revolver_protege`)
 - [ ] **Hangman** — точки: Винтовка "Hangman" (`gun_hangman`)
 - [x] **Maresleg** — настроен, обрез (hacksaw) и Broken тоже: левая рука отпускает при перевороте, в прицеле — анимация полной версии: Дробовик рычажного действия (`gun_maresleg`), Дробовик "Broken" (`gun_maresleg_broken`)
-- [ ] **Liberator** — точки: Дробовик "Liberator" (`gun_liberator`)
+- [x] **Liberator** — настроен: левая рука обхватывает цевьё, при перезарядке и осмотре обходит стволы и открывает/закрывает их (как Old Classic), правая по очереди вставляет четыре патрона, пуля у края кисти, рука повёрнута на 30° вокруг патрона, чтобы не уходить в пушку: Дробовик "Liberator" (`gun_liberator`)
 - [x] **SPAS12** — настроен: левая рука на помпе (не соскальзывает при осмотре), правая вставляет первый патрон сбоку, левая заряжает снизу, дым уже: Дробовик "SPAS-12" (`gun_spas12`)
 - [ ] **Shredder** — точки: Автоматический дробовик (`gun_autoshotgun`), Автоматический дробовик "Shredder" (`gun_autoshotgun_shredder`)
 - [ ] **Sexy** — точки: Автоматический дробовик "Sexy" (`gun_autoshotgun_sexy`), Автоматический дробовик "The Heretic" (`gun_autoshotgun_heretic`)
@@ -50,7 +50,7 @@
 - [ ] **Folly** — точки: Пушка "Folly" (`gun_folly`)
 - [ ] **Aberrator** — точки: Пистолет "Aberrator" (`gun_aberrator`)
 - [ ] **NI4NI** — точки: Энергетический револьвер "N I 4 N I" (`gun_n_i_4_n_i`)
-- [x] **DoubleBarrel** — настроен, обрез (hacksaw) и Sacred Dragon тоже: левая рука обходит стволы и открывает/закрывает их, правая вставляет гильзы, у обреза своя точка левой руки: Двуствольный дробовик "Old Classic" (`gun_double_barrel`), Двуствольный дробовик "Sacred Dragon" (`gun_double_barrel_sacred_dragon`)
+- [x] **DoubleBarrel** — настроен, обрез (hacksaw) и Sacred Dragon тоже: левая рука обходит стволы и открывает/закрывает их (сдвинута влево из ствола, сверху чуть ниже; в перезарядке свои значения), правая вставляет гильзы, у обреза своя точка левой руки; Sacred Dragon берёт все настройки Old Classic (`sameAs`): Двуствольный дробовик "Old Classic" (`gun_double_barrel`), Двуствольный дробовик "Sacred Dragon" (`gun_double_barrel_sacred_dragon`)
 
 ## Без рук (акимбо / ближний бой)
 

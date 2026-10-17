@@ -37,10 +37,10 @@ public final class Config {
     // Thickness keeps a vanilla arm's 4:18 proportion to the arm's length, so a far hand gets a
     // proportionally thicker arm, the way an arm looks when it is closer to the eye.
     public static boolean arms = true;
-    public static float armScale = 1.0F;
+    public static float armScale = 0.8F;
     public static float armMaxScale = 4.0F;
     public static float armRollRight = -5F;
-    public static float armRollLeft = -48F;
+    public static float armRollLeft = -55F;
     public static float[] armDirRight = {-0.21F, 0.13F, -1.09F};
     public static float[] armDirLeft = {0.29F, -0.53F, -0.95F};
     public static float armReachRight = -0.81F;
@@ -76,11 +76,21 @@ public final class Config {
     // thickness of an arm loading shells (armRightCarry / armLeftCarry), on top of armScale
     public static float armLoadScaleRight = 1F;
     public static float armLoadScaleLeft = 1F;
+    // longest arm, in vanilla arms of its thickness (1 = never longer than the vanilla 4:12 arm); shorter arms are
+    // cut, not squashed; 0 = the old way, stretched or squashed to reach armReach
+    public static float armLength = 1.0F;
     // turn of an arm around its own axis while it loads shells, degrees; NaN = the same as armRollRight/Left
     public static float armLoadRollRight = Float.NaN;
     public static float armLoadRollLeft = Float.NaN;
     // draw NTM's muzzle smoke rising up the screen whatever frame the renderer gives it (SPAS-12 sends it at the camera)
     public static boolean smokeUpright = false;
+    public static boolean armAroundSmooth = false;
+    public static float armAroundTopDrop = 0F;
+    public static float armAroundShift = 0F;
+    public static float armCarryTurnRight = 0F;
+    public static float armCarryTurnLeft = 0F;
+    public static float armAroundShiftReload = Float.NaN;
+    public static float armAroundTopDropReload = Float.NaN;
     // width of NTM's muzzle smoke, 1 = as NTM draws it (SPAS-12's is 3x as wide as Maresleg's)
     public static float smokeWidth = 1F;
     public static float armScaleRight = 1F;
@@ -108,8 +118,14 @@ public final class Config {
             armScale: arm thickness on top of the automatic one, 1 = vanilla arm proportions
             armMaxScale: upper limit of the automatic thickness
             armBaseRight, armBaseLeft: arm thickness before armScale, the same on every gun (as on Maresleg); 0 = automatic (grows with the arm's length)
+            armLength: longest arm in vanilla arms of its thickness (1 = never stretched); a shorter arm is cut at armReach, not squashed; 0 = stretched/squashed to armReach
             armLoadScaleRight, armLoadScaleLeft: thickness of each arm while it loads shells into the gun, on top of armScale, 1 = unchanged
             armLoadRollRight, armLoadRollLeft: turn of each arm around its own axis while it loads shells, degrees, NaN = armRollRight/Left
+            armAroundTopDrop: while armLeftKeys holds the left hand over the part (90), lower it toward the part by this many arm pixels; none at the side
+            armAroundShift: while armLeftKeys moves the left hand round a part, move it left (out of the part) by this many arm pixels; none under the part (-90)
+            armAroundShiftReload, armAroundTopDropReload: the same during reloads, NaN = armAroundShift / armAroundTopDrop
+            armCarryTurnRight, armCarryTurnLeft: while a hand carries a shell, turn the arm around that point about the shell's long axis, degrees, + = the shoulder end to the right
+            armAroundSmooth: while armLeftKeys moves the left hand round a part, keep the arm's length and blend into the usual hold below -45 (Liberator)
             smokeWidth: width of the muzzle smoke, 1 = as NTM draws it
             smokeUpright: draw the muzzle smoke rising up the screen, for guns whose smoke goes the wrong way (SPAS-12)
             armScaleRight, armScaleLeft: thickness of each arm holding the gun on top of armScale (not while carrying shells), 1 = unchanged
@@ -133,6 +149,7 @@ public final class Config {
               the bus moves it within that part, the hand holds point x,y,z from side dx,dy,dz (default 0,0,-1 = behind;
               the side's length is the distance in half arm widths, 1 = the point on the hand's surface),
               and before the grab time it reaches for where the thing will be then (Old Classic: "BarrelShort SHELLS 900 0,0,-1.75")
+              several buses and points split by | ("Barrel SHELL1|SHELL2 0 x,y,z|x,y,z"): the one whose bus moves now (Liberator)
             armRightCarryKeys, armLeftCarryKeys: how much the hand is on the carried thing, per animation:
               "RELOAD 650:0 900:1 1300:1 1500:0" = ms:weight; ms:weight/b takes the thing where the bus has it at b ms
               (walking b back retraces its path); ms:weight@x,y,z = a fixed spot instead; RELOAD/<bus> = only when that bus plays
@@ -257,8 +274,16 @@ public final class Config {
         armBaseLeft = num(p, "armBaseLeft", armBaseLeft);
         armLoadScaleRight = num(p, "armLoadScaleRight", armLoadScaleRight);
         armLoadScaleLeft = num(p, "armLoadScaleLeft", armLoadScaleLeft);
+        armLength = num(p, "armLength", armLength);
         armLoadRollRight = num(p, "armLoadRollRight", armLoadRollRight);
         armLoadRollLeft = num(p, "armLoadRollLeft", armLoadRollLeft);
+        armAroundSmooth = bool(p, "armAroundSmooth", armAroundSmooth);
+        armAroundTopDrop = num(p, "armAroundTopDrop", armAroundTopDrop);
+        armAroundShift = num(p, "armAroundShift", armAroundShift);
+        armCarryTurnRight = num(p, "armCarryTurnRight", armCarryTurnRight);
+        armCarryTurnLeft = num(p, "armCarryTurnLeft", armCarryTurnLeft);
+        armAroundShiftReload = num(p, "armAroundShiftReload", armAroundShiftReload);
+        armAroundTopDropReload = num(p, "armAroundTopDropReload", armAroundTopDropReload);
         smokeUpright = Boolean.parseBoolean(p.getProperty("smokeUpright", Boolean.toString(smokeUpright)).trim());
         smokeWidth = num(p, "smokeWidth", smokeWidth);
         armScaleRight = num(p, "armScaleRight", armScaleRight);
@@ -326,8 +351,16 @@ public final class Config {
         p.setProperty("armBaseLeft", Float.toString(armBaseLeft));
         p.setProperty("armLoadScaleRight", Float.toString(armLoadScaleRight));
         p.setProperty("armLoadScaleLeft", Float.toString(armLoadScaleLeft));
+        p.setProperty("armLength", Float.toString(armLength));
         p.setProperty("armLoadRollRight", Float.toString(armLoadRollRight));
         p.setProperty("armLoadRollLeft", Float.toString(armLoadRollLeft));
+        p.setProperty("armAroundSmooth", Boolean.toString(armAroundSmooth));
+        p.setProperty("armAroundTopDrop", Float.toString(armAroundTopDrop));
+        p.setProperty("armAroundShift", Float.toString(armAroundShift));
+        p.setProperty("armCarryTurnRight", Float.toString(armCarryTurnRight));
+        p.setProperty("armCarryTurnLeft", Float.toString(armCarryTurnLeft));
+        p.setProperty("armAroundShiftReload", Float.toString(armAroundShiftReload));
+        p.setProperty("armAroundTopDropReload", Float.toString(armAroundTopDropReload));
         p.setProperty("smokeUpright", Boolean.toString(smokeUpright));
         p.setProperty("smokeWidth", Float.toString(smokeWidth));
         p.setProperty("armScaleRight", Float.toString(armScaleRight));

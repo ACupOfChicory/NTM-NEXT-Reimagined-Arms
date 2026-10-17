@@ -17,6 +17,21 @@ public final class ReaimTimes {
     public static final float DEFAULT = 0.3F;
     private static final String FILE = "ntm-gunfeel-server.properties";
     private static final Map<String, String> VALUES = new TreeMap<>();
+    // the times shipped in the mod jar (ntmgunfeel-server.properties); the server's file wins over them
+    private static final Map<String, String> BUILTIN = builtin();
+
+    private static Map<String, String> builtin() {
+        Map<String, String> out = new TreeMap<>();
+        try (var in = ReaimTimes.class.getResourceAsStream("/ntmgunfeel-server.properties")) {
+            if (in == null) return out;
+            Properties p = new Properties();
+            p.load(new java.io.InputStreamReader(in, java.nio.charset.StandardCharsets.UTF_8));
+            for (String key : p.stringPropertyNames()) out.put(key, p.getProperty(key).trim());
+        } catch (java.io.IOException | RuntimeException e) {
+            // no built-in times
+        }
+        return out;
+    }
     private static long stamp = Long.MIN_VALUE;
     private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger("ntm-gunfeel");
 
@@ -26,7 +41,9 @@ public final class ReaimTimes {
     // kind: "reload" or "inspect"
     public static float seconds(String gun, String kind) {
         poll();
-        String v = VALUES.get(gun + ".reaim" + cap(kind));
+        String key = gun + ".reaim" + cap(kind);
+        String v = VALUES.get(key);
+        if (v == null) v = BUILTIN.get(key);
         if (v == null) return DEFAULT;
         try {
             return Math.max(0F, Float.parseFloat(v.trim()));

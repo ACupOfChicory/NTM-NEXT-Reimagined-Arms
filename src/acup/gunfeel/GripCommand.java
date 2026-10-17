@@ -54,11 +54,13 @@ public final class GripCommand {
                 .then(Commands.literal("reset").executes(c -> {
                     Identifier id = held(c);
                     if (id == null) return 0;
-                    Grips.reset(id);
+                    Grips.reset(id + missing());
                     return show(c);
                 }))
                 .then(hand("right", true))
-                .then(hand("left", false))));
+                .then(hand("left", false))
+                .then(handAt("rightAt", true))
+                .then(handAt("leftAt", false))));
     }
 
     private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> hand(String name, boolean right) {
@@ -67,7 +69,20 @@ public final class GripCommand {
                         .then(Commands.argument("z", FloatArgumentType.floatArg(-1F, 2F)).executes(c -> {
                             Identifier id = held(c);
                             if (id == null) return 0;
-                            Grips.set(id, right, FloatArgumentType.getFloat(c, "x"), FloatArgumentType.getFloat(c, "y"),
+                            Grips.set(id + missing(), right, FloatArgumentType.getFloat(c, "x"), FloatArgumentType.getFloat(c, "y"),
+                                    FloatArgumentType.getFloat(c, "z"));
+                            return show(c);
+                        }))));
+    }
+
+    // /gunfeel grip leftAt <x> <y> <z>: the point in model units, as grip show prints it
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> handAt(String name, boolean right) {
+        return Commands.literal(name).then(Commands.argument("x", FloatArgumentType.floatArg())
+                .then(Commands.argument("y", FloatArgumentType.floatArg())
+                        .then(Commands.argument("z", FloatArgumentType.floatArg()).executes(c -> {
+                            Identifier id = held(c);
+                            if (id == null) return 0;
+                            Grips.setAt(id + missing(), right, FloatArgumentType.getFloat(c, "x"), FloatArgumentType.getFloat(c, "y"),
                                     FloatArgumentType.getFloat(c, "z"));
                             return show(c);
                         }))));
@@ -105,10 +120,20 @@ public final class GripCommand {
     private static int show(CommandContext<CommandSourceStack> c) {
         Identifier id = held(c);
         if (id == null) return 0;
-        Grips.Grip g = Grips.get(id);
-        c.getSource().sendSuccess(() -> Component.literal(id + "  right " + (g.rightAt() != null ? "в точке модели " + fmt(g.rightAt()) : fmt(g.right()))
-                + "  left " + (g.leftAt() != null ? "в точке модели " + fmt(g.leftAt()) : fmt(g.left()))), false);
+        String missing = missing();
+        Grips.Grip g = Grips.get(id, missing);
+        c.getSource().sendSuccess(() -> Component.literal(id + missing
+                + "  right" + (g.rightAt() != null ? "At " + fmt(g.rightAt()) : " " + fmt(g.right()))
+                + "  left" + (g.leftAt() != null ? "At " + fmt(g.leftAt()) : " " + fmt(g.left()))), false);
         return 1;
+    }
+
+    // model parts the held gun's variant does not draw ("-Stock-Barrel" for a sawn-off), "" = the full gun:
+    // hand positions set while holding a variant go to that variant only
+    private static String missing() {
+        var player = Minecraft.getInstance().player;
+        GunGeometry g = player == null ? null : Arms.geometry(player.getMainHandItem().getItem());
+        return g == null ? "" : g.missing;
     }
 
     private static String fmt(float[] v) {
