@@ -24,6 +24,10 @@ public final class ModelRecoil {
     private ModelRecoil() {
     }
 
+    public static boolean idle() {
+        return SHOTS.isEmpty();
+    }
+
     public static void shot(float strength, boolean aiming) {
         float s = strength * Config.modelKick;
         if (s <= 0F) return;

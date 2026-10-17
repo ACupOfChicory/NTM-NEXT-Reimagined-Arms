@@ -34,6 +34,9 @@ public final class GunFeel {
     static void init() {
         NeoForge.EVENT_BUS.addListener(RenderFrameEvent.Pre.class, e -> {
             Config.poll();
+            LocalPlayer player = Minecraft.getInstance().player;
+            Item held = player == null ? null : player.getMainHandItem().getItem();
+            Config.select(held instanceof ItemGunBaseNT ? net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(held).toString() : null);
             if (Config.enabled) CameraRecoil.frame();
         });
         NeoForge.EVENT_BUS.addListener(RenderHandEvent.class, GunFeel::onRenderHand);
