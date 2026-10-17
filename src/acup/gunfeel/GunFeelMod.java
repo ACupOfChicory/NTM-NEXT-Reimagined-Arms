@@ -8,5 +8,7 @@ import net.neoforged.fml.common.Mod;
 public final class GunFeelMod {
     public GunFeelMod(Dist dist) {
         if (dist.isClient()) GunFeel.init();
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(net.neoforged.neoforge.event.RegisterCommandsEvent.class,
+                e -> ReaimCommand.register(e.getDispatcher()));
     }
 }
