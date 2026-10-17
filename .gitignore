@@ -1,0 +1,3 @@
+build/
+*.jar
+grips-backup-*.properties

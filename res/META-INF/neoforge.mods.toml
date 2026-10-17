@@ -1,0 +1,19 @@
+modLoader = "javafml"
+loaderVersion = "[1,)"
+license = "MIT"
+
+[[mods]]
+modId = "ntmgunfeel"
+version = "0.5"
+displayName = "NTM Gun Feel"
+description = "HBM NTM guns: hold-to-aim (server), smooth camera recoil, spring model recoil, centred hip position, hidden off-hand item and corner ammo HUD (client)."
+
+[[mixins]]
+config = "ntmgunfeel.mixins.json"
+
+[[dependencies.ntmgunfeel]]
+modId = "hbm"
+type = "required"
+versionRange = "*"
+ordering = "AFTER"
+side = "BOTH"

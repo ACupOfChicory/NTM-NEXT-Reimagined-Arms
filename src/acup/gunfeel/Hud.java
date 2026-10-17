@@ -1,0 +1,138 @@
+package acup.gunfeel;
+
+import org.joml.Matrix3x2fStack;
+
+import com.hbm.items.weapon.sedna.BulletConfig;
+import com.hbm.items.weapon.sedna.GunConfig;
+import com.hbm.items.weapon.sedna.ItemGunBaseNT;
+import com.hbm.items.weapon.sedna.Receiver;
+import com.hbm.items.weapon.sedna.mags.IMagazine;
+import com.hbm.items.weapon.sedna.mags.MagazineSingleTypeBase;
+
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.resources.Identifier;
+import net.minecraft.util.Mth;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.item.ItemStack;
+
+// TaCZ-style ammo HUD in the bottom-right corner, drawn instead of NTM's counter next to the hotbar:
+//   [gun]  | 006  0015
+//          |      [ammo]
+//          | ======== durability
+// One block per receiver (akimbo and multi-barrel guns get several, stacked upward).
+public final class Hud {
+    private static final int WHITE = 0xFFFFFFFF;
+    private static final int DIM = 0x66FFFFFF;
+    private static final int GREY = 0xCCFFFFFF;
+    private static final int LOW = 0xFFFF5555;
+
+    private Hud() {
+    }
+
+    public static void render(GuiGraphicsExtractor g, LocalPlayer player, ItemStack stack, ItemGunBaseNT gun) {
+        Font font = Minecraft.getInstance().font;
+        Inventory inv = player.getInventory();
+        int right = g.guiWidth() - 8;
+        int bottom = g.guiHeight() - 8;
+        boolean gunDrawn = false;
+        for (int c = gun.getConfigCount() - 1; c >= 0; c--) {
+            GunConfig config = gun.getConfig(stack, c);
+            Receiver[] receivers = config.getReceivers(stack);
+            if (receivers == null) continue;
+            for (int r = receivers.length - 1; r >= 0; r--) {
+                IMagazine<?> mag = receivers[r].getMagazine(stack);
+                if (mag == null) continue;
+                float wear = ItemGunBaseNT.getWear(stack, c);
+                float dura = config.getDurability(stack);
+                float health = dura > 0 ? Mth.clamp(1F - wear / dura, 0F, 1F) : 1F;
+                block(g, font, player, inv, stack, mag, health, right, bottom, !gunDrawn);
+                gunDrawn = true;
+                bottom -= 34;
+            }
+        }
+    }
+
+    private static void block(GuiGraphicsExtractor g, Font font, LocalPlayer player, Inventory inv, ItemStack stack,
+            IMagazine<?> mag, float health, int right, int bottom, boolean drawGun) {
+        int top = bottom - 30;
+        String big, small = null;
+        boolean low;
+        if (mag instanceof MagazineSingleTypeBase single) {
+            int amount = single.getAmount(stack, inv);
+            int capacity = single.getCapacity(stack);
+            big = String.format("%03d", Math.min(amount, 999));
+            small = String.format("%04d", Math.min(reserve(single, stack, inv), 9999));
+            low = capacity > 0 && amount <= Math.max(1, capacity / 4);
+        } else {
+            big = mag.reportAmmoStateForHUD(stack, player);
+            low = false;
+        }
+
+        // ammo icon and reserve, right-aligned
+        int smallW = small == null ? 16 : Math.max(16, font.width(small));
+        int smallX = right - smallW;
+        if (small != null) g.text(font, small, smallX, top + 2, GREY, true);
+        ItemStack icon = mag.getIconForHUD(stack, player);
+        if (icon != null && !icon.isEmpty()) g.item(icon, smallX, top + 12);
+
+        // big magazine count at 2x, leading zeros dimmed
+        int bigW = font.width(big) * 2;
+        int bigX = smallX - 4 - bigW;
+        Matrix3x2fStack pose = g.pose();
+        pose.pushMatrix();
+        pose.translate(bigX, top + 2);
+        pose.scale(2F, 2F);
+        int lead = 0;
+        if (small != null) {
+            while (lead < big.length() - 1 && big.charAt(lead) == '0') lead++;
+        }
+        String zeros = big.substring(0, lead);
+        int color = low ? LOW : WHITE;
+        if (!zeros.isEmpty()) g.text(font, zeros, 0, 0, DIM, true);
+        g.text(font, big.substring(lead), font.width(zeros), 0, color, true);
+        pose.popMatrix();
+
+        // durability bar under the numbers
+        int barL = bigX, barR = right, barY = top + 28;
+        g.fill(barL, barY, barR, barY + 2, 0x80000000);
+        int fillR = barL + Math.round((barR - barL) * health);
+        g.fill(barL, barY, fillR, barY + 2, durabilityColor(health));
+
+        // separator and gun icon
+        int sepX = bigX - 6;
+        g.fill(sepX, top, sepX + 1, bottom, 0xCCFFFFFF);
+        if (drawGun) {
+            Identifier silhouette = Silhouette.get(stack.getItem());
+            if (silhouette != null) {
+                int w = 72, h = w * Silhouette.H / Silhouette.W;
+                g.blit(RenderPipelines.GUI_TEXTURED, silhouette, sepX - 6 - w, top + (30 - h) / 2, 0F, 0F, w, h,
+                        Silhouette.W, Silhouette.H, Silhouette.W, Silhouette.H);
+            } else {
+                g.item(stack, sepX - 6 - 16, top + 7);
+            }
+        }
+    }
+
+    private static int reserve(MagazineSingleTypeBase mag, ItemStack gun, Inventory inv) {
+        BulletConfig type = mag.getType(gun, inv);
+        if (type == null) return 0;
+        ItemStack ammo = type.ammoStack();
+        if (ammo == null || ammo.isEmpty()) return 0;
+        int n = 0;
+        for (int i = 0; i < inv.getContainerSize(); i++) {
+            ItemStack s = inv.getItem(i);
+            if (!s.isEmpty() && ItemStack.isSameItemSameComponents(s, ammo)) n += s.getCount();
+        }
+        return n;
+    }
+
+    private static int durabilityColor(float health) {
+        int r = (int) (255 * Mth.clamp(2F - 2F * health, 0F, 1F));
+        int gr = (int) (255 * Mth.clamp(2F * health, 0F, 1F));
+        return 0xFF000000 | r << 16 | gr << 8 | 0x40;
+    }
+}

@@ -1,0 +1,83 @@
+package acup.gunfeel.mixin;
+
+import org.joml.Vector3f;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+import com.hbm.client.render.OtherHandCollector;
+import com.hbm.items.weapon.sedna.ItemGunBaseNT;
+import com.hbm.render.loader.HFRWavefrontObject;
+import com.hbm.render.item.weapon.sedna.ItemRenderWeaponBase;
+import com.mojang.blaze3d.vertex.PoseStack;
+
+import acup.gunfeel.Arms;
+import acup.gunfeel.Config;
+import acup.gunfeel.GunFeel;
+import acup.gunfeel.ModelRecoil;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.renderer.SubmitNodeCollector;
+import net.minecraft.client.renderer.rendertype.RenderType;
+import net.minecraft.world.item.ItemStack;
+
+@Mixin(value = ItemRenderWeaponBase.class, remap = false)
+public abstract class MixinItemRenderWeaponBase {
+    private static final String RENDER = "Lcom/hbm/render/item/weapon/sedna/ItemRenderWeaponBase;renderFirstPerson"
+            + "(Lnet/minecraft/world/item/ItemStack;Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;I)V";
+
+    @Inject(method = "setupTransformsAndSubmit", at = @At("HEAD"))
+    private void gunfeel$begin(ItemStack stack, LocalPlayer player, PoseStack pose, SubmitNodeCollector collector, int light, CallbackInfo ci) {
+        GunFeel.current = (ItemRenderWeaponBase) (Object) this;
+        GunFeel.currentAkimbo = ((ItemRenderWeaponBase) (Object) this).isAkimbo(player);
+        if (Config.enabled) GunFeel.checkShot(stack);
+        Arms.begin(stack);
+    }
+
+    private static final String SETUP = "Lcom/hbm/render/item/weapon/sedna/ItemRenderWeaponBase;setupFirstPerson"
+            + "(Lnet/minecraft/world/item/ItemStack;Lcom/mojang/blaze3d/vertex/PoseStack;)V";
+
+    @Inject(method = "setupTransformsAndSubmit", at = @At(value = "INVOKE", target = SETUP))
+    private void gunfeel$camera(ItemStack stack, LocalPlayer player, PoseStack pose, SubmitNodeCollector collector, int light, CallbackInfo ci) {
+        Arms.cameraFrame(pose);
+    }
+
+    @Inject(method = "setupTransformsAndSubmit", at = @At(value = "INVOKE", target = RENDER, shift = At.Shift.AFTER))
+    private void gunfeel$arms(ItemStack stack, LocalPlayer player, PoseStack pose, SubmitNodeCollector collector, int light, CallbackInfo ci) {
+        Arms.end(stack, collector, light, Config.enabled && !GunFeel.currentAkimbo && !(collector instanceof OtherHandCollector));
+    }
+
+    @Inject(method = "submitPart(Lnet/minecraft/client/renderer/SubmitNodeCollector;Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/rendertype/RenderType;Lcom/hbm/render/loader/HFRWavefrontObject;III)V",
+            at = @At("HEAD"))
+    private static void gunfeel$part(SubmitNodeCollector collector, PoseStack pose, RenderType type, HFRWavefrontObject model, int part, int light, int color, CallbackInfo ci) {
+        if (GunFeel.current != null) Arms.part(pose, model, part);
+    }
+
+    // Spring kick in the gun's frame, after NTM placed the gun and before it draws the model.
+    @Inject(method = "setupTransformsAndSubmit", at = @At(value = "INVOKE", target = RENDER))
+    private void gunfeel$kick(ItemStack stack, LocalPlayer player, PoseStack pose, SubmitNodeCollector collector, int light, CallbackInfo ci) {
+        if (Config.enabled) {
+            Vector3f pivot = new Vector3f();
+            float size = Arms.kickFrame(stack.getItem(), pivot);
+            if (size > 0F) ModelRecoil.apply(pose, size, pivot);
+        }
+        Arms.gunFrame(pose);
+    }
+
+    @Inject(method = "setupTransformsAndSubmit", at = @At("RETURN"))
+    private void gunfeel$end(ItemStack stack, LocalPlayer player, PoseStack pose, SubmitNodeCollector collector, int light, CallbackInfo ci) {
+        GunFeel.current = null;
+    }
+
+    // Hip-fire position, moved toward the centre of the screen; the aimed position is unchanged.
+    @Inject(method = "standardAimingTransform", at = @At("HEAD"), cancellable = true)
+    private static void gunfeel$hip(ItemStack stack, PoseStack pose, double sX, double sY, double sZ, double aX, double aY, double aZ, CallbackInfo ci) {
+        if (!Config.enabled || GunFeel.current == null || GunFeel.currentAkimbo) return;
+        if (Config.hipX == 1F && Config.hipY == 1F && Config.hipZ == 1F) return;
+        float p = ItemGunBaseNT.prevAimingProgress + (ItemGunBaseNT.aimingProgress - ItemGunBaseNT.prevAimingProgress) * ItemRenderWeaponBase.interp;
+        double hx = sX * Config.hipX, hy = sY * Config.hipY;
+        double hz = sZ > 0 ? sZ * Config.hipZ : sZ;
+        pose.translate(hx + (aX - hx) * p, hy + (aY - hy) * p, hz + (aZ - hz) * p);
+        ci.cancel();
+    }
+}
