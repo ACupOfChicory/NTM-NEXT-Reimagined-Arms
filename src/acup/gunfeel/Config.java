@@ -51,6 +51,12 @@ public final class Config {
     public static float armSlideTo = 0.05F;
     public static float armStretch = 0.1F;
     public static float armInspectDrop = 1.0F;
+    // Model part a hand moves with (a pump, a lever), by its name in the model; empty = the gun's body.
+    public static String armPartRight = "";
+    public static String armPartLeft = "";
+    // NTM animation bus (an angle, like Maresleg's FLIP) during which the left hand lets go of the gun
+    public static String armReleaseLeft = "";
+    public static float[] armReleaseMove = {4F, 0F, 0F};
 
     private static final String HEADER = """
             NTM Gun Feel. Saved values are re-read while the game runs.
@@ -78,6 +84,9 @@ public final class Config {
             armSlideTo: how far toward the stock a hand may slide, 0 = stock end, 1 = muzzle
             armInspectDrop: in inspect animations, how far the left hand drops on screen when the gun lies on its side, arm pixels
             armStretch: how much an arm may stretch in animations before the hand starts sliding, 0.1 = 10%
+            armPartRight, armPartLeft: model part the hand moves with (a pump: SPAS-12 PumpGrip), empty = the gun's body
+            armReleaseLeft: NTM animation bus (a turn angle) during which the left hand lets go (sawn-off Maresleg: FLIP), empty = never
+            armReleaseMove: where the released left hand moves and back, arm pixels: x (+ left), y (+ up), z (+ forward)
             Every value except enabled can be overridden per gun in config/ntm-gunfeel-guns.properties
             (hbm\\:gun_maresleg.armRollLeft = -55) or with /gunfeel set <key> <value> for the held gun.
             Hand positions per gun: <gun>.right / <gun>.left there, or /gunfeel grip""";
@@ -176,6 +185,10 @@ public final class Config {
         armSlideTo = num(p, "armSlideTo", armSlideTo);
         armStretch = num(p, "armStretch", armStretch);
         armInspectDrop = num(p, "armInspectDrop", armInspectDrop);
+        armPartRight = p.getProperty("armPartRight", armPartRight).trim();
+        armPartLeft = p.getProperty("armPartLeft", armPartLeft).trim();
+        armReleaseLeft = p.getProperty("armReleaseLeft", armReleaseLeft).trim();
+        armReleaseMove = vec(p, "armReleaseMove", armReleaseMove);
     }
 
     private static Properties snapshot() {
@@ -216,6 +229,10 @@ public final class Config {
         p.setProperty("armSlideTo", Float.toString(armSlideTo));
         p.setProperty("armStretch", Float.toString(armStretch));
         p.setProperty("armInspectDrop", Float.toString(armInspectDrop));
+        p.setProperty("armPartRight", armPartRight);
+        p.setProperty("armPartLeft", armPartLeft);
+        p.setProperty("armReleaseLeft", armReleaseLeft);
+        p.setProperty("armReleaseMove", armReleaseMove[0] + "," + armReleaseMove[1] + "," + armReleaseMove[2]);
         return p;
     }
 

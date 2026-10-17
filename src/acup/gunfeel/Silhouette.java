@@ -13,27 +13,27 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.Item;
 
 // Flat side view of an NTM gun for the HUD, like TaCZ's hud icons: the drawn parts of the
-// first-person model rasterised on the CPU (orthographic, looking along -X, muzzle to the right),
+// first-person model rasterised on the CPU (orthographic, looking along -X of the aligned frame, muzzle to the right),
 // light grey-white with simple diffuse shading, 2x supersampled.
 public final class Silhouette {
     public static final int W = 192, H = 64;
     private static final int SS = 2;
-    private static final Map<Item, Identifier> TEXTURES = new IdentityHashMap<>();
+    private static final Map<GunGeometry, Identifier> TEXTURES = new IdentityHashMap<>();
 
     private Silhouette() {
     }
 
     // null until the gun has been drawn once in first person
     public static Identifier get(Item item) {
-        Identifier id = TEXTURES.get(item);
-        if (id != null) return id;
         GunGeometry geo = Arms.geometry(item);
         if (geo == null) return null;
+        Identifier id = TEXTURES.get(geo);
+        if (id != null) return id;
         Identifier key = BuiltInRegistries.ITEM.getKey(item);
-        id = Identifier.fromNamespaceAndPath("ntmgunfeel", "hud/" + key.getNamespace() + "/" + key.getPath());
+        id = Identifier.fromNamespaceAndPath("ntmgunfeel", "hud/" + key.getNamespace() + "/" + key.getPath() + (geo.variant > 0 ? "_" + geo.variant : ""));
         NativeImage image = render(geo);
         Minecraft.getInstance().getTextureManager().register(id, new DynamicTexture(id::toString, image));
-        TEXTURES.put(item, id);
+        TEXTURES.put(geo, id);
         return id;
     }
 
@@ -42,7 +42,21 @@ public final class Silhouette {
         float[] depth = new float[w * h];
         int[] shade = new int[w * h];
         java.util.Arrays.fill(depth, -Float.MAX_VALUE);
-        float len = geo.maxZ - geo.minZ, tall = geo.maxY - geo.minY;
+        // bounds of the parts as placed
+        float minY = Float.MAX_VALUE, maxY = -Float.MAX_VALUE, minZ = Float.MAX_VALUE, maxZ = -Float.MAX_VALUE;
+        for (int p = geo.parts.nextSetBit(0); p >= 0; p = geo.parts.nextSetBit(p + 1)) {
+            float[] q = geo.model.groups[p].quads(false);
+            org.joml.Matrix4f place = place(geo, p);
+            for (int v = 0; v + 2 < q.length; v += GroupObject.STRIDE) {
+                org.joml.Vector3f a = place.transformPosition(new org.joml.Vector3f(q[v], q[v + 1], q[v + 2]));
+                minY = Math.min(minY, a.y);
+                maxY = Math.max(maxY, a.y);
+                minZ = Math.min(minZ, a.z);
+                maxZ = Math.max(maxZ, a.z);
+            }
+        }
+        if (minY > maxY) return new NativeImage(W, H, true);
+        float len = Math.max(maxZ - minZ, 1e-3F), tall = Math.max(maxY - minY, 1e-3F);
         float pad = 2F * SS;
         float scale = Math.min((w - 2 * pad) / len, (h - 2 * pad) / tall);
         float ox = (w - len * scale) / 2F, oy = (h - tall * scale) / 2F;
@@ -51,16 +65,19 @@ public final class Silhouette {
 
         for (int p = geo.parts.nextSetBit(0); p >= 0; p = geo.parts.nextSetBit(p + 1)) {
             float[] q = geo.model.groups[p].quads(false);
+            org.joml.Matrix4f place = place(geo, p);
             for (int f = 0; f + 4 * GroupObject.STRIDE <= q.length; f += 4 * GroupObject.STRIDE) {
-                float nx = q[f + 5], ny = q[f + 6], nz = q[f + 7];
+                org.joml.Vector3f n = place.transformDirection(new org.joml.Vector3f(q[f + 5], q[f + 6], q[f + 7])).normalize();
+                float nx = n.x, ny = n.y, nz = n.z;
                 float diffuse = Math.abs(nx * lx + ny * ly + nz * lz);
                 int grey = (int) (150 + 105 * Math.min(1F, diffuse));
                 float[] sx = new float[4], sy = new float[4], sd = new float[4];
                 for (int c = 0; c < 4; c++) {
                     int v = f + c * GroupObject.STRIDE;
-                    sx[c] = ox + (q[v + 2] - geo.minZ) * scale;
-                    sy[c] = oy + (geo.maxY - q[v + 1]) * scale;
-                    sd[c] = q[v];
+                    org.joml.Vector3f a = place.transformPosition(new org.joml.Vector3f(q[v], q[v + 1], q[v + 2]));
+                    sx[c] = ox + (a.z - minZ) * scale;
+                    sy[c] = oy + (maxY - a.y) * scale;
+                    sd[c] = a.x;
                 }
                 tri(sx, sy, sd, 0, 1, 2, grey, depth, shade, w, h);
                 tri(sx, sy, sd, 0, 2, 3, grey, depth, shade, w, h);
@@ -87,6 +104,12 @@ public final class Silhouette {
             }
         }
         return image;
+    }
+
+    // the part where NTM draws it at rest (e.g. a shell sunk into the receiver), in the aligned frame
+    private static org.joml.Matrix4f place(GunGeometry geo, int part) {
+        org.joml.Matrix4f m = new org.joml.Matrix4f().set(geo.toAligned);
+        return geo.partRest[part] != null ? m.mul(geo.partRest[part]) : m;
     }
 
     private static void tri(float[] x, float[] y, float[] d, int a, int b, int c, int grey, float[] depth, int[] shade, int w, int h) {

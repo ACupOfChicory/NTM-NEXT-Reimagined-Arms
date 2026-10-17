@@ -106,7 +106,8 @@ public final class GripCommand {
         Identifier id = held(c);
         if (id == null) return 0;
         Grips.Grip g = Grips.get(id);
-        c.getSource().sendSuccess(() -> Component.literal(id + "  right " + fmt(g.right()) + "  left " + fmt(g.left())), false);
+        c.getSource().sendSuccess(() -> Component.literal(id + "  right " + (g.rightAt() != null ? "в точке модели " + fmt(g.rightAt()) : fmt(g.right()))
+                + "  left " + (g.leftAt() != null ? "в точке модели " + fmt(g.leftAt()) : fmt(g.left()))), false);
         return 1;
     }
 

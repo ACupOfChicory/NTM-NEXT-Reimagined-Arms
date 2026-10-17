@@ -18,11 +18,14 @@ import net.neoforged.fml.loading.FMLPaths;
 //   hbm\:gun_maresleg.armRollLeft = -55          any setting from ntm-gunfeel.properties
 // Hand positions: z = fraction of the gun length, stock (0) to muzzle (1); x and y = fractions of the
 // model's cross-section at that z (y 0 = underside), see GunGeometry.grip.
+//   hbm\:gun_g3.rightAt = 0,-1.8,-4.6              or a point in model units (x left, y up, z to the muzzle),
+// which does not move when attachments change the model's size; it wins over .right/.left.
 public final class Grips {
-    public record Grip(float[] right, float[] left) {
+    // rightAt / leftAt: point in model units or null
+    public record Grip(float[] right, float[] left, float[] rightAt, float[] leftAt) {
     }
 
-    public static final Grip DEFAULT = new Grip(new float[] {0.5F, 0F, 0.33F}, new float[] {0.5F, 0F, 0.70F});
+    public static final Grip DEFAULT = new Grip(new float[] {0.5F, 0F, 0.33F}, new float[] {0.5F, 0F, 0.70F}, null, null);
     private static final String FILE = "ntm-gunfeel-guns.properties";
     private static final String OLD_FILE = "ntm-gunfeel-grips.properties";
     private static final Map<String, String> VALUES = new HashMap<>();
@@ -40,7 +43,8 @@ public final class Grips {
     public static Grip get(Identifier id) {
         String key = id.toString();
         float[] r = vec(VALUES.get(key + ".right")), l = vec(VALUES.get(key + ".left"));
-        return new Grip(r != null ? r : DEFAULT.right(), l != null ? l : DEFAULT.left());
+        return new Grip(r != null ? r : DEFAULT.right(), l != null ? l : DEFAULT.left(), vec(VALUES.get(key + ".rightAt")),
+                vec(VALUES.get(key + ".leftAt")));
     }
 
     // settings overridden for this gun (without hand positions)
@@ -50,13 +54,14 @@ public final class Grips {
         for (Map.Entry<String, String> e : VALUES.entrySet()) {
             if (!e.getKey().startsWith(prefix)) continue;
             String k = e.getKey().substring(prefix.length());
-            if (k.equals("right") || k.equals("left")) continue;
+            if (k.equals("right") || k.equals("left") || k.equals("rightAt") || k.equals("leftAt")) continue;
             out.put(k, e.getValue());
         }
         return out;
     }
 
     public static void set(Identifier id, boolean right, float x, float y, float z) {
+        VALUES.remove(id + (right ? ".rightAt" : ".leftAt"));
         put(id.toString(), right ? "right" : "left", x + "," + y + "," + z);
     }
 
@@ -70,6 +75,8 @@ public final class Grips {
     public static void reset(Identifier id) {
         VALUES.remove(id + ".right");
         VALUES.remove(id + ".left");
+        VALUES.remove(id + ".rightAt");
+        VALUES.remove(id + ".leftAt");
         version++;
         save();
     }
@@ -121,6 +128,7 @@ public final class Grips {
                 w.write("# NTM Gun Feel settings per gun: <gun id>.<setting> = value (any key from ntm-gunfeel.properties)\n");
                 w.write("# hand positions: <gun id>.right / .left = x,y,z  z stock(0)-muzzle(1); x, y across the model there, y 0 = underside\n");
                 w.write("# default right = 0.5,0,0.33  left = 0.5,0,0.70 (the hand sits under that point)\n");
+                w.write("# or .rightAt / .leftAt = x,y,z in model units (x left, y up, z to the muzzle); wins over .right / .left\n");
                 for (Map.Entry<String, String> e : new TreeMap<>(VALUES).entrySet()) {
                     w.write(e.getKey().replace(":", "\\:") + " = " + e.getValue() + "\n");
                 }

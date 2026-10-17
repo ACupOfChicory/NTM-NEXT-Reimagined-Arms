@@ -56,6 +56,7 @@ public abstract class MixinItemRenderWeaponBase {
     // Spring kick in the gun's frame, after NTM placed the gun and before it draws the model.
     @Inject(method = "setupTransformsAndSubmit", at = @At(value = "INVOKE", target = RENDER))
     private void gunfeel$kick(ItemStack stack, LocalPlayer player, PoseStack pose, SubmitNodeCollector collector, int light, CallbackInfo ci) {
+        Arms.aimFrame(pose);
         if (Config.enabled) {
             Vector3f pivot = new Vector3f();
             float size = Arms.kickFrame(stack.getItem(), pivot);

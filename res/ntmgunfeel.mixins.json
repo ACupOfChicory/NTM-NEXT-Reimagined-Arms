@@ -4,6 +4,6 @@
   "package": "acup.gunfeel.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": ["MixinHoldAim"],
-  "client": ["MixinItemGunBaseNT", "MixinItemRenderWeaponBase", "MixinHbmAnimations", "MixinClientRegistry"],
+  "client": ["MixinItemGunBaseNT", "MixinItemRenderWeaponBase", "MixinHbmAnimations", "MixinClientRegistry", "MixinWholeModelGuns", "MixinGunConfigAnims"],
   "injectors": { "defaultRequire": 1 }
 }
