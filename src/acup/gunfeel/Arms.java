@@ -70,10 +70,10 @@ public final class Arms {
     private static int gripVersion = -1;
 
     // pose of the part each hand moves with (armPartRight / armPartLeft), this frame
-    // [2]: the part the right hand carries things within (armRightCarry)
-    private static final Matrix4f[] FOLLOW = {new Matrix4f(), new Matrix4f(), new Matrix4f()};
-    private static final boolean[] HAVE_FOLLOW = new boolean[3];
-    private static final int[] FOLLOW_ID = {-1, -1, -1};
+    // [2], [3]: the part the right / left hand carries things within (armRightCarry / armLeftCarry)
+    private static final Matrix4f[] FOLLOW = {new Matrix4f(), new Matrix4f(), new Matrix4f(), new Matrix4f()};
+    private static final boolean[] HAVE_FOLLOW = new boolean[4];
+    private static final int[] FOLLOW_ID = {-1, -1, -1, -1};
 
     // the parts NTM drew this frame (of the first model it drew) and where
     private static final int MAX_PARTS = 128;
@@ -101,9 +101,36 @@ public final class Arms {
         haveCamera = false;
         frameModel = null;
         frameParts = 0;
-        HAVE_FOLLOW[0] = HAVE_FOLLOW[1] = HAVE_FOLLOW[2] = false;
-        FOLLOW_ID[0] = FOLLOW_ID[1] = FOLLOW_ID[2] = -1;
+        java.util.Arrays.fill(HAVE_FOLLOW, false);
+        java.util.Arrays.fill(FOLLOW_ID, -1);
         capturing = true;
+    }
+
+    // Smoke from the muzzle (smokeUpright): NTM draws it in the gun's frame, x = trailing back, y = rising,
+    // z = sideways. Keep where it starts and its size, but lay those axes along the camera, as on an upright
+    // gun: back toward the viewer, up the screen, to the left.
+    private static final java.util.Set<Item> SMOKE_LOGGED = java.util.Collections.newSetFromMap(new IdentityHashMap<>());
+
+    public static void uprightSmoke(PoseStack pose) {
+        if (!haveCamera || item == null) return;
+        Matrix4f m = pose.last().pose();
+        Matrix4f cameraInv = new Matrix4f(CAMERA).invert();
+        Matrix4f inCamera = new Matrix4f(cameraInv).mul(m);
+        if (SMOKE_LOGGED.add(item)) {
+            Vector3f x = inCamera.transformDirection(new Vector3f(1F, 0F, 0F)).normalize();
+            Vector3f y = inCamera.transformDirection(new Vector3f(0F, 1F, 0F)).normalize();
+            GunFeel.LOGGER.info("smoke frame of {} (camera: +x left, +y up, +z forward): trail {} rise {}",
+                    BuiltInRegistries.ITEM.getKey(item), x, y);
+        }
+        float scale = inCamera.getScale(new Vector3f()).x;
+        Vector3f origin = inCamera.transformPosition(new Vector3f());
+        Matrix4f upright = new Matrix4f(
+                0F, 0F, -scale, 0F,
+                0F, scale, 0F, 0F,
+                scale, 0F, 0F, 0F,
+                origin.x, origin.y, origin.z, 1F);
+        m.set(CAMERA).mul(upright);
+        pose.last().normal().set(new org.joml.Matrix3f(m).normal());
     }
 
     // frame before NTM's setupFirstPerson: camera-fixed, +X left, +Y up, +Z forward
@@ -128,7 +155,8 @@ public final class Arms {
             frameModel = model;
             FOLLOW_ID[0] = partByName(model, Config.armPartRight);
             FOLLOW_ID[1] = partByName(model, Config.armPartLeft);
-            FOLLOW_ID[2] = partByName(model, carry().part);
+            FOLLOW_ID[2] = partByName(model, carry(0).part);
+            FOLLOW_ID[3] = partByName(model, carry(1).part);
         }
         if (model != frameModel) return;
         if (frameParts < MAX_PARTS) {
@@ -136,7 +164,7 @@ public final class Arms {
             FRAME_POSE[frameParts].set(pose.last().pose());
             FRAME_PART[frameParts++] = part;
         }
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < 4; i++) {
             if (!HAVE_FOLLOW[i] && FOLLOW_ID[i] >= 0 && part == FOLLOW_ID[i]) {
                 FOLLOW[i].set(pose.last().pose());
                 HAVE_FOLLOW[i] = true;
@@ -195,7 +223,7 @@ public final class Arms {
         // model space -> the gun's aligned frame (a whole-quarter-turn rotation: its inverse is its transpose)
         Matrix4f fromAligned = new Matrix4f().set(new org.joml.Matrix3f(geometry.toAligned).transpose());
         BODY.mul(fromAligned);
-        for (int i = 0; i < 3; i++) if (HAVE_FOLLOW[i]) FOLLOW[i].mul(fromAligned);
+        for (int i = 0; i < 4; i++) if (HAVE_FOLLOW[i]) FOLLOW[i].mul(fromAligned);
         REL.set(KICKED).invert().mul(BODY);
         haveRel = true;
         relItem = item;
@@ -319,6 +347,42 @@ public final class Arms {
                 submit(collector, light, arm, skin, new Matrix4f(CAMERA).mul(r.local), sleeveShown, sleeve);
                 continue;
             }
+            // A hand leaves the gun to carry something NTM animates (shells into the chambers or the tube) and comes back.
+            float[] carried = carryState(i);
+            if (carried != null && HAVE_FOLLOW[2 + i]) {
+                Matrix4f home = HAVE_FOLLOW[i] ? new Matrix4f(cameraInv).mul(FOLLOW[i]) : bodyInCamera;
+                Vector3f g = home.transformPosition(grip[i][0], grip[i][1], grip[i][2], new Vector3f());
+                Matrix4f within = new Matrix4f(cameraInv).mul(FOLLOW[2 + i]);
+                Carry c = carry(i);
+                Vector3f at = within.transformPosition(carried[1], carried[2], carried[3], new Vector3f());
+                Vector3f side = within.transformDirection(new Vector3f(c.dir)).normalize();
+                Vector3f p = new Vector3f(g).lerp(at, carried[0]);
+                Vector3f off = new Vector3f(down).lerp(side, carried[0]);
+                if (off.lengthSquared() < 1e-6F) off.set(side);
+                // the arm sized and aimed as if it rested at the carrying spot (a hand near the camera is thinner
+                // than one reaching far forward), blended with the arm on the gun by the carry weight
+                ArmRest there = new ArmRest();
+                restArm(there, right, slim, p, off.normalize(), p, axisPoint,
+                        right ? Config.armDirRight : Config.armDirLeft, right ? Config.armReachRight : Config.armReachLeft,
+                        right ? Config.armLoadScaleRight : Config.armLoadScaleLeft);
+                ArmRest mix = r;
+                if (there.valid) {
+                    float w = carried[0];
+                    mix = new ArmRest();
+                    mix.valid = true;
+                    mix.length = r.length + (there.length - r.length) * w;
+                    mix.s = r.s + (there.s - r.s) * w;
+                    // the shoulder stays where it is (reaching back past the camera would sweep the arm across it)
+                    mix.hand.set(r.hand);
+                    mix.shoulder.set(r.shoulder);
+                    mix.axis.set(r.axis);
+                    mix.center.set(r.center);
+                    mix.local.set(r.local);
+                }
+                arm(collector, light, arm, skin, slim, right, p, null, geometry.fraction(grip[i][2]), bodyInCamera, off, p, false,
+                        new Quaternionf(), 0F, axisPoint, mix, sleeveShown, sleeve);
+                continue;
+            }
             // The left hand lets go while the gun spins (sawn-off Maresleg cocking): it keeps its rest pose,
             // moves aside and back, and takes the gun again when the turn is complete.
             float release = right ? 0F : release();
@@ -348,7 +412,8 @@ public final class Arms {
                 }
             }
             Vector3f g = holder.transformPosition(grip[i][0], grip[i][1], grip[i][2], new Vector3f());
-            float[][] path = profiles(item)[i];
+            // a hand on a moving part (a pump) stays on it: no sliding along the body, the arm reaches instead
+            float[][] path = HAVE_FOLLOW[i] ? null : profiles(item)[i];
             Vector3f center = holder.transformPosition(grip[i + 2][0], grip[i + 2][1], grip[i + 2][2], new Vector3f());
             // while firing/cycling the gun turns inside the loosely holding support hand
             boolean spin = !right && !inspect;
@@ -357,18 +422,6 @@ public final class Arms {
             // surface; a hand that follows less of the roll shows the gun turning inside it.
             Quaternionf own = new Quaternionf().slerp(twist, right ? followRight : followLeft).normalize();
             if (!Float.isFinite(own.x + own.y + own.z + own.w)) own.identity();
-            // the right hand leaves the grip to carry something (new shells into the chambers) and comes back
-            float carry = right ? keyValue(Config.armRightCarryKeys, 1) : Float.NaN;
-            if (carry > 0F && HAVE_FOLLOW[2]) {
-                Matrix4f within = new Matrix4f(cameraInv).mul(FOLLOW[2]);
-                Vector3f at = within.transformPosition(carryPoint());
-                Vector3f behind = within.transformDirection(new Vector3f(0F, 0F, -1F)).normalize();
-                Vector3f p = new Vector3f(g).lerp(at, carry);
-                Vector3f off = new Vector3f(down).lerp(behind, carry);
-                if (off.lengthSquared() < 1e-6F) off.set(behind);
-                arm(collector, light, arm, skin, slim, right, p, null, gripF, bodyInCamera, off.normalize(), p, false, own, 0F, axisPoint, r, sleeveShown, sleeve);
-                continue;
-            }
             arm(collector, light, arm, skin, slim, right, g, path, gripF, bodyInCamera, down, center, spin, own,
                     inspect && !right ? Config.armInspectDrop : 0F, axisPoint, r, sleeveShown, sleeve);
         }
@@ -439,42 +492,157 @@ public final class Arms {
         return out;
     }
 
-    private record Carry(String part, String bus, int grab, float[] at) {
+    // what a hand carries: a point moved by an NTM bus within a part, the hand on its `dir` side
+    private record Carry(String part, String bus, int grab, float[] at, float[] dir) {
     }
 
-    private static String carrySource;
-    private static Carry carry = new Carry("", "", 0, new float[3]);
+    private static final Carry NO_CARRY = new Carry("", "", 0, new float[3], new float[] {0F, 0F, -1F});
+    private static final String[] carrySource = new String[2];
+    private static final Carry[] carry = {NO_CARRY, NO_CARRY};
 
-    // armRightCarry: "<part> <bus> <grab ms> x,y,z"
-    private static Carry carry() {
-        if (!Config.armRightCarry.equals(carrySource)) {
-            carrySource = Config.armRightCarry;
-            carry = new Carry("", "", 0, new float[3]);
-            String[] w = carrySource.split("\\s+");
-            if (w.length == 4) {
+    // armRightCarry / armLeftCarry: "<part> <bus> <grab ms> x,y,z [dx,dy,dz]"
+    private static Carry carry(int hand) {
+        String src = hand == 0 ? Config.armRightCarry : Config.armLeftCarry;
+        if (!src.equals(carrySource[hand])) {
+            carrySource[hand] = src;
+            carry[hand] = NO_CARRY;
+            String[] w = src.split("\\s+");
+            if (w.length == 4 || w.length == 5) {
                 try {
-                    String[] xyz = w[3].split(",");
-                    carry = new Carry(w[0], w[1], Integer.parseInt(w[2]),
-                            new float[] {Float.parseFloat(xyz[0]), Float.parseFloat(xyz[1]), Float.parseFloat(xyz[2])});
+                    float[] at = xyz(w[3]), dir = w.length == 5 ? xyz(w[4]) : NO_CARRY.dir;
+                    carry[hand] = new Carry(w[0], w[1], Integer.parseInt(w[2]), at, dir);
                 } catch (RuntimeException e) {
                     // malformed: no carrying
                 }
             }
         }
-        return carry;
+        return carry[hand];
     }
 
-    // The carried point within its part (aligned frame): the bus moves it; before the grab time the hand
-    // reaches for where it will be at that time instead of following what the bus does earlier.
-    private static Vector3f carryPoint() {
-        Carry c = carry();
+    private static float[] xyz(String v) {
+        String[] t = v.split(",");
+        return new float[] {Float.parseFloat(t[0]), Float.parseFloat(t[1]), Float.parseFloat(t[2])};
+    }
+
+    private static final String[] carryKeysSource = new String[2];
+    @SuppressWarnings("unchecked")
+    private static final Map<String, List<float[]>>[] carryKeys = new Map[] {Map.of(), Map.of()};
+
+    // Carry keys, per animation: "RELOAD 0:0 120:1 300:1/300 520:0 ; RELOAD_CYCLE ..." = ms:weight (0 on the gun,
+    // 1 on the carried thing), optionally /b = where along the bus the thing is taken from (ms; walking b back
+    // retraces its path), or @x,y,z = a fixed point instead of the bus. An animation name may be followed by
+    // /<bus> to apply only to animations that have that bus (SPAS-12: RELOAD/PumpGrip = the empty reload).
+    // Each entry: {t, w, kind (0 live, 1 bus time, 2 fixed point), b, x, y, z}
+    private static Map<String, List<float[]>> parseCarryKeys(String src) {
+        Map<String, List<float[]>> out = new HashMap<>();
+        for (String anim : src.split(";")) {
+            String[] w = anim.trim().split("\\s+");
+            if (w.length < 2) continue;
+            List<float[]> list = new ArrayList<>();
+            for (int j = 1; j < w.length; j++) {
+                try {
+                    String e = w[j];
+                    float[] k = new float[7];
+                    int colon = e.indexOf(':');
+                    k[0] = Float.parseFloat(e.substring(0, colon));
+                    String rest = e.substring(colon + 1);
+                    int at = rest.indexOf('@'), sl = rest.indexOf('/');
+                    if (at >= 0) {
+                        float[] pt = xyz(rest.substring(at + 1));
+                        k[2] = 2F;
+                        k[4] = pt[0];
+                        k[5] = pt[1];
+                        k[6] = pt[2];
+                        rest = rest.substring(0, at);
+                    } else if (sl >= 0) {
+                        k[2] = 1F;
+                        k[3] = Float.parseFloat(rest.substring(sl + 1));
+                        rest = rest.substring(0, sl);
+                    }
+                    k[1] = Float.parseFloat(rest);
+                    if (!list.isEmpty() && k[0] <= list.get(list.size() - 1)[0]) continue;
+                    list.add(k);
+                } catch (RuntimeException e) {
+                    // skip a malformed entry
+                }
+            }
+            if (list.isEmpty()) continue;
+            int slash = w[0].indexOf('/');
+            String name = slash < 0 ? w[0].toUpperCase(java.util.Locale.ROOT)
+                    : w[0].substring(0, slash).toUpperCase(java.util.Locale.ROOT) + w[0].substring(slash);
+            out.put(name, list);
+        }
+        return out;
+    }
+
+    // keys for the animation playing now: "<TYPE>/<bus>" when the animation has that bus, else "<TYPE>"
+    private static <T> T forAnimation(Map<String, T> byName) {
+        HbmAnimations.Animation anim = HbmAnimations.getRelevantAnim(0);
+        GunAnimation type = HbmAnimations.getGunAnimation(0);
+        if (anim == null || type == null) return null;
+        String prefix = type.name() + "/";
+        for (Map.Entry<String, T> e : byName.entrySet()) {
+            if (!e.getKey().startsWith(prefix)) continue;
+            String bus = e.getKey().substring(prefix.length());
+            if (anim.animation.getBus(bus) != null) return e.getValue();
+        }
+        return byName.get(type.name());
+    }
+
+    // {weight, x, y, z}: how much the hand is on the carried thing now and where that is (aligned frame of the
+    // carry part); null = the hand stays on the gun
+    private static float[] carryState(int hand) {
+        String src = hand == 0 ? Config.armRightCarryKeys : Config.armLeftCarryKeys;
+        if (src.isEmpty() || carry(hand) == NO_CARRY) return null;
+        if (!src.equals(carryKeysSource[hand])) {
+            carryKeysSource[hand] = src;
+            carryKeys[hand] = parseCarryKeys(src);
+        }
+        List<float[]> k = forAnimation(carryKeys[hand]);
+        if (k == null) return null;
+        float t = animMillis();
+        float[] a = k.get(0), b = a;
+        float u = 0F;
+        if (t >= k.get(k.size() - 1)[0]) a = b = k.get(k.size() - 1);
+        else if (t > a[0]) {
+            for (int j = 1; j < k.size(); j++) {
+                if (t < k.get(j)[0]) {
+                    a = k.get(j - 1);
+                    b = k.get(j);
+                    u = (t - a[0]) / Math.max(b[0] - a[0], 1F);
+                    break;
+                }
+            }
+        }
+        float s = u * u * (3F - 2F * u);
+        float w = a[1] + (b[1] - a[1]) * s;
+        if (w <= 0F) return null;
+        Carry c = carry(hand);
+        Vector3f p;
+        if (a[2] != 2F && b[2] != 2F) {
+            float live = Math.max(t, c.grab);
+            float ba = a[2] == 1F ? a[3] : live, bb = b[2] == 1F ? b[3] : live;
+            p = busPoint(c, ba + (bb - ba) * u);
+        } else {
+            Vector3f pa = a[2] == 2F ? fixedPoint(c, a) : busPoint(c, a[2] == 1F ? a[3] : Math.max(t, c.grab));
+            Vector3f pb = b[2] == 2F ? fixedPoint(c, b) : busPoint(c, b[2] == 1F ? b[3] : Math.max(t, c.grab));
+            p = pa.lerp(pb, s);
+        }
+        return new float[] {Math.min(w, 1F), p.x, p.y, p.z};
+    }
+
+    // the carried point with the bus at time `ms`: the bus's location (model frame) plus the point
+    private static Vector3f busPoint(Carry c, float ms) {
         Vector3f p = new Vector3f(c.at[0], c.at[1], c.at[2]);
         HbmAnimations.Animation anim = HbmAnimations.getRelevantAnim(0);
-        if (anim == null) return p;
-        com.hbm.render.anim.BusAnimationSequence seq = anim.animation.getBus(c.bus);
-        double[] t = seq == null ? null : seq.getTransformation((int) Math.max(animMillis(), c.grab));
+        com.hbm.render.anim.BusAnimationSequence seq = anim == null ? null : anim.animation.getBus(c.bus);
+        double[] t = seq == null ? null : seq.getTransformation((int) ms);
         if (t == null) return p;
         return p.add(geometry.toAligned.transform(new Vector3f((float) t[0], (float) t[1], (float) t[2])));
+    }
+
+    private static Vector3f fixedPoint(Carry c, float[] key) {
+        return new Vector3f(c.at[0], c.at[1], c.at[2]).add(geometry.toAligned.transform(new Vector3f(key[4], key[5], key[6])));
     }
 
     // progress (0..1) of the turn on the armReleaseLeft bus while the left hand is off the gun, else 0
@@ -511,6 +679,12 @@ public final class Arms {
     // direction until depth `reach`. grip = point on the gun's underside; the arm's end face touches it there.
     private static void restArm(ArmRest rest, boolean right, boolean slim, Vector3f grip, Vector3f down, Vector3f center,
             Vector3f axisPoint, float[] dirCfg, float reach) {
+        restArm(rest, right, slim, grip, down, center, axisPoint, dirCfg, reach, right ? Config.armScaleRight : Config.armScaleLeft);
+    }
+
+    // holdScale: armScaleRight/Left, the thickness of an arm holding the gun (1 for a hand carrying something)
+    private static void restArm(ArmRest rest, boolean right, boolean slim, Vector3f grip, Vector3f down, Vector3f center,
+            Vector3f axisPoint, float[] dirCfg, float reach, float holdScale) {
         Vector3f dir = new Vector3f(dirCfg[0], dirCfg[1], dirCfg[2]);
         if (dir.lengthSquared() < 1e-6F) {
             rest.valid = false;
@@ -520,7 +694,9 @@ public final class Arms {
         // run back from the hand until depth `reach`; at least one vanilla arm length
         float length = dir.z < -1e-3F ? (grip.z - reach) / -dir.z : 18F / 16F;
         length = Math.max(length, 18F / 16F);
-        float s = Math.min(length / (18F / 16F), Config.armMaxScale) * Config.armScale;
+        // thickness: fixed (armBaseRight/Left, the same on every gun) or grown with the arm's length
+        float base = right ? Config.armBaseRight : Config.armBaseLeft;
+        float s = (base > 0F ? base : Math.min(length / (18F / 16F), Config.armMaxScale)) * Config.armScale * holdScale;
         // hand hangs under the grip by half its thickness so the arm does not cut into the gun
         Vector3f hand = new Vector3f(down).mul(2F / 16F * s).add(grip);
         rest.valid = true;

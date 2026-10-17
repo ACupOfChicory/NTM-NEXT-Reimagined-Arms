@@ -62,6 +62,20 @@ public final class Config {
     // right hand carries something NTM animates (Old Classic's new shells): "<part> <bus> <grab ms> x,y,z"
     public static String armRightCarry = "";
     public static String armRightCarryKeys = "";
+    public static String armLeftCarry = "";
+    public static String armLeftCarryKeys = "";
+    // arm thickness before armScale, the same on every gun (Maresleg / Old Classic); 0 = grows with the arm's length
+    public static float armBaseRight = 1.70F;
+    public static float armBaseLeft = 3.02F;
+    // thickness of an arm loading shells (armRightCarry / armLeftCarry), on top of armScale
+    public static float armLoadScaleRight = 1F;
+    public static float armLoadScaleLeft = 1F;
+    // draw NTM's muzzle smoke rising up the screen whatever frame the renderer gives it (SPAS-12 sends it at the camera)
+    public static boolean smokeUpright = false;
+    // width of NTM's muzzle smoke, 1 = as NTM draws it (SPAS-12's is 3x as wide as Maresleg's)
+    public static float smokeWidth = 1F;
+    public static float armScaleRight = 1F;
+    public static float armScaleLeft = 1F;
 
     private static final String HEADER = """
             NTM Gun Feel. Saved values are re-read while the game runs.
@@ -80,6 +94,11 @@ public final class Config {
             arms: draw the player's arms holding the gun with both hands
             armScale: arm thickness on top of the automatic one, 1 = vanilla arm proportions
             armMaxScale: upper limit of the automatic thickness
+            armBaseRight, armBaseLeft: arm thickness before armScale, the same on every gun (as on Maresleg); 0 = automatic (grows with the arm's length)
+            armLoadScaleRight, armLoadScaleLeft: thickness of each arm while it loads shells into the gun, on top of armScale, 1 = unchanged
+            smokeWidth: width of the muzzle smoke, 1 = as NTM draws it
+            smokeUpright: draw the muzzle smoke rising up the screen, for guns whose smoke goes the wrong way (SPAS-12)
+            armScaleRight, armScaleLeft: thickness of each arm holding the gun on top of armScale (not while carrying shells), 1 = unchanged
             armRollRight, armRollLeft: turn of each arm around its own axis, degrees
             armDirRight, armDirLeft: direction from the hand to the shoulder: x (+ left), y (+ up), z (+ forward)
             armReachRight, armReachLeft: the arm goes back until this distance in front of the eye (- = behind)
@@ -95,10 +114,12 @@ public final class Config {
             armLeftKeys: the left hand goes around the part it holds during NTM animations, per animation:
               "RELOAD 0:-90 240:90 1250:90 1500:-90; INSPECT ..." = milliseconds:angle, angle around the part
               (-90 under, 0 the gun's left side, 90 on top, 180 right side); empty = the hand stays put
-            armRightCarry: the right hand carries something an NTM animation bus moves, "<part> <bus> <grab ms> x,y,z":
-              the bus moves it within that part, the hand holds point x,y,z (from behind), and before the grab time
-              it reaches for where the thing will be then (Old Classic: "BarrelShort SHELLS 900 0,0,-1.75")
-            armRightCarryKeys: how much the right hand is on the carried thing, per animation: "RELOAD 650:0 900:1 1300:1 1500:0"
+            armRightCarry, armLeftCarry: the hand carries something an NTM animation bus moves, "<part> <bus> <grab ms> x,y,z [dx,dy,dz]":
+              the bus moves it within that part, the hand holds point x,y,z from side dx,dy,dz (default 0,0,-1 = behind),
+              and before the grab time it reaches for where the thing will be then (Old Classic: "BarrelShort SHELLS 900 0,0,-1.75")
+            armRightCarryKeys, armLeftCarryKeys: how much the hand is on the carried thing, per animation:
+              "RELOAD 650:0 900:1 1300:1 1500:0" = ms:weight; ms:weight/b takes the thing where the bus has it at b ms
+              (walking b back retraces its path); ms:weight@x,y,z = a fixed spot instead; RELOAD/<bus> = only when that bus plays
             Every value except enabled can be overridden per gun in config/ntm-gunfeel-guns.properties
             (hbm\\:gun_maresleg.armRollLeft = -55) or with /gunfeel set <key> <value> for the held gun.
             Hand positions per gun: <gun>.right / <gun>.left there, or /gunfeel grip""";
@@ -204,6 +225,16 @@ public final class Config {
         armLeftKeys = p.getProperty("armLeftKeys", armLeftKeys).trim();
         armRightCarry = p.getProperty("armRightCarry", armRightCarry).trim();
         armRightCarryKeys = p.getProperty("armRightCarryKeys", armRightCarryKeys).trim();
+        armLeftCarry = p.getProperty("armLeftCarry", armLeftCarry).trim();
+        armLeftCarryKeys = p.getProperty("armLeftCarryKeys", armLeftCarryKeys).trim();
+        armBaseRight = num(p, "armBaseRight", armBaseRight);
+        armBaseLeft = num(p, "armBaseLeft", armBaseLeft);
+        armLoadScaleRight = num(p, "armLoadScaleRight", armLoadScaleRight);
+        armLoadScaleLeft = num(p, "armLoadScaleLeft", armLoadScaleLeft);
+        smokeUpright = Boolean.parseBoolean(p.getProperty("smokeUpright", Boolean.toString(smokeUpright)).trim());
+        smokeWidth = num(p, "smokeWidth", smokeWidth);
+        armScaleRight = num(p, "armScaleRight", armScaleRight);
+        armScaleLeft = num(p, "armScaleLeft", armScaleLeft);
     }
 
     private static Properties snapshot() {
@@ -251,6 +282,16 @@ public final class Config {
         p.setProperty("armLeftKeys", armLeftKeys);
         p.setProperty("armRightCarry", armRightCarry);
         p.setProperty("armRightCarryKeys", armRightCarryKeys);
+        p.setProperty("armLeftCarry", armLeftCarry);
+        p.setProperty("armLeftCarryKeys", armLeftCarryKeys);
+        p.setProperty("armBaseRight", Float.toString(armBaseRight));
+        p.setProperty("armBaseLeft", Float.toString(armBaseLeft));
+        p.setProperty("armLoadScaleRight", Float.toString(armLoadScaleRight));
+        p.setProperty("armLoadScaleLeft", Float.toString(armLoadScaleLeft));
+        p.setProperty("smokeUpright", Boolean.toString(smokeUpright));
+        p.setProperty("smokeWidth", Float.toString(smokeWidth));
+        p.setProperty("armScaleRight", Float.toString(armScaleRight));
+        p.setProperty("armScaleLeft", Float.toString(armScaleLeft));
         return p;
     }
 

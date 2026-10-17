@@ -65,6 +65,26 @@ public abstract class MixinItemRenderWeaponBase {
         Arms.gunFrame(pose);
     }
 
+    // Muzzle smoke: NTM fades each smoke node by a fixed step until it is no longer above zero, so the alpha ends
+    // slightly negative, and a negative alpha turns into a nearly opaque colour (the widest, oldest smoke at the top
+    // flashes white, spreading downward). Clamp it at zero. Also laid upright on guns that need it (smokeUpright).
+    @Inject(method = "renderSmokeNodes", at = @At("HEAD"))
+    private static void gunfeel$smoke(SubmitNodeCollector collector, PoseStack pose, java.util.List<ItemGunBaseNT.SmokeNode> nodes, double scale, int light, CallbackInfo ci) {
+        if (!Config.enabled) return;
+        try {
+            for (ItemGunBaseNT.SmokeNode node : nodes) if (node.alpha < 0.0) node.alpha = 0.0;
+        } catch (java.util.ConcurrentModificationException e) {
+            // the list changed under us (game tick); next frame clamps the rest
+        }
+        if (Config.smokeUpright && GunFeel.current != null && !nodes.isEmpty()) Arms.uprightSmoke(pose);
+    }
+
+    // Muzzle smoke width (smokeWidth): the scale argument is the smoke's width.
+    @org.spongepowered.asm.mixin.injection.ModifyVariable(method = "renderSmokeNodes", at = @At("HEAD"), argsOnly = true)
+    private static double gunfeel$smokeWidth(double scale) {
+        return Config.enabled && GunFeel.current != null ? scale * Config.smokeWidth : scale;
+    }
+
     @Inject(method = "setupTransformsAndSubmit", at = @At("RETURN"))
     private void gunfeel$end(ItemStack stack, LocalPlayer player, PoseStack pose, SubmitNodeCollector collector, int light, CallbackInfo ci) {
         GunFeel.current = null;

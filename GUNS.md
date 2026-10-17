@@ -13,7 +13,7 @@
 - [ ] **Hangman** — точки: Винтовка "Hangman" (`gun_hangman`)
 - [x] **Maresleg** — настроен, обрез (hacksaw) и Broken тоже: левая рука отпускает при перевороте, в прицеле — анимация полной версии: Дробовик рычажного действия (`gun_maresleg`), Дробовик "Broken" (`gun_maresleg_broken`)
 - [ ] **Liberator** — точки: Дробовик "Liberator" (`gun_liberator`)
-- [ ] **SPAS12** — точки, левая рука на помпе: Дробовик "SPAS-12" (`gun_spas12`)
+- [x] **SPAS12** — настроен: левая рука на помпе (не соскальзывает при осмотре), правая вставляет первый патрон сбоку, левая заряжает снизу, дым уже: Дробовик "SPAS-12" (`gun_spas12`)
 - [ ] **Shredder** — точки: Автоматический дробовик (`gun_autoshotgun`), Автоматический дробовик "Shredder" (`gun_autoshotgun_shredder`)
 - [ ] **Sexy** — точки: Автоматический дробовик "Sexy" (`gun_autoshotgun_sexy`), Автоматический дробовик "The Heretic" (`gun_autoshotgun_heretic`)
 - [ ] **Greasegun** — точки: Пистолет-пулемёт "Grease Gun" (`gun_greasegun`)
