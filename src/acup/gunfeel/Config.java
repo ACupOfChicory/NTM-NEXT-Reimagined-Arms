@@ -21,6 +21,9 @@ public final class Config {
     public static float cameraScale = 0.55F;
     public static float cameraTime = 1.0F;
     public static float cameraShake = 1.0F;
+    // recoil curves per gun, "t:v t:v ..." in seconds; empty = the built-in TaCZ M870 shapes (Curve.java)
+    public static String cameraPitch = "", cameraYaw = "", cameraRoll = "";
+    public static String kickPitch = "", kickYaw = "", kickRoll = "", kickPosY = "", kickPosZ = "";
     // Gun model kick per shot, and how much of NTM's own RECOIL animation is kept.
     public static float modelKick = 1.0F;
     public static float modelRotate = 1.0F;
@@ -57,6 +60,9 @@ public final class Config {
     // NTM animation bus (an angle, like Maresleg's FLIP) during which the left hand lets go of the gun
     public static String armReleaseLeft = "";
     public static float[] armReleaseMove = {4F, 0F, 0F};
+    // the same for the right hand; it stays where it was by default (Henry inspect: the gun spins away from it)
+    public static String armReleaseRight = "";
+    public static float[] armReleaseMoveRight = {0F, 0F, 0F};
     // left hand moves around the held part in an animation: "RELOAD 0:-90 240:90 ...; INSPECT ..."
     public static String armLeftKeys = "";
     // right hand carries something NTM animates (Old Classic's new shells): "<part> <bus> <grab ms> x,y,z"
@@ -70,6 +76,9 @@ public final class Config {
     // thickness of an arm loading shells (armRightCarry / armLeftCarry), on top of armScale
     public static float armLoadScaleRight = 1F;
     public static float armLoadScaleLeft = 1F;
+    // turn of an arm around its own axis while it loads shells, degrees; NaN = the same as armRollRight/Left
+    public static float armLoadRollRight = Float.NaN;
+    public static float armLoadRollLeft = Float.NaN;
     // draw NTM's muzzle smoke rising up the screen whatever frame the renderer gives it (SPAS-12 sends it at the camera)
     public static boolean smokeUpright = false;
     // width of NTM's muzzle smoke, 1 = as NTM draws it (SPAS-12's is 3x as wide as Maresleg's)
@@ -85,6 +94,10 @@ public final class Config {
             cameraScale: camera kick, degrees per unit of NTM recoil (0.55: lever shotgun ~5.5 deg like TaCZ M870)
             cameraTime: duration of the camera kick, 1 = like M870
             cameraShake: camera roll shake on each shot, 0 = off
+            cameraPitch, cameraYaw, cameraRoll: camera recoil curves "t:v t:v ..." (seconds:value), empty = TaCZ M870;
+              pitch and yaw peak at 1 (times NTM recoil x cameraScale), roll in degrees (times cameraShake)
+            kickPitch, kickYaw, kickRoll, kickPosY, kickPosZ: gun model kick curves, same format, empty = TaCZ M870;
+              degrees and 1/16 gun-length units as in a TaCZ shoot animation (pitch = -root rotation x), end on 0
             modelKick: strength of the gun model kick (M870 shoot animation), 0 = off
             modelRotate: share of the rotation in the model kick (muzzle up, yaw, roll)
             modelSpeed: playback speed of the model kick, higher = shorter
@@ -96,6 +109,7 @@ public final class Config {
             armMaxScale: upper limit of the automatic thickness
             armBaseRight, armBaseLeft: arm thickness before armScale, the same on every gun (as on Maresleg); 0 = automatic (grows with the arm's length)
             armLoadScaleRight, armLoadScaleLeft: thickness of each arm while it loads shells into the gun, on top of armScale, 1 = unchanged
+            armLoadRollRight, armLoadRollLeft: turn of each arm around its own axis while it loads shells, degrees, NaN = armRollRight/Left
             smokeWidth: width of the muzzle smoke, 1 = as NTM draws it
             smokeUpright: draw the muzzle smoke rising up the screen, for guns whose smoke goes the wrong way (SPAS-12)
             armScaleRight, armScaleLeft: thickness of each arm holding the gun on top of armScale (not while carrying shells), 1 = unchanged
@@ -111,11 +125,13 @@ public final class Config {
             armPartRight, armPartLeft: model part the hand moves with (a pump: SPAS-12 PumpGrip), empty = the gun's body
             armReleaseLeft: NTM animation bus (a turn angle) during which the left hand lets go (sawn-off Maresleg: FLIP), empty = never
             armReleaseMove: where the released left hand moves and back, arm pixels: x (+ left), y (+ up), z (+ forward)
+            armReleaseRight, armReleaseMoveRight: the same for the right hand (default move 0,0,0 = it stays where it was)
             armLeftKeys: the left hand goes around the part it holds during NTM animations, per animation:
               "RELOAD 0:-90 240:90 1250:90 1500:-90; INSPECT ..." = milliseconds:angle, angle around the part
               (-90 under, 0 the gun's left side, 90 on top, 180 right side); empty = the hand stays put
             armRightCarry, armLeftCarry: the hand carries something an NTM animation bus moves, "<part> <bus> <grab ms> x,y,z [dx,dy,dz]":
-              the bus moves it within that part, the hand holds point x,y,z from side dx,dy,dz (default 0,0,-1 = behind),
+              the bus moves it within that part, the hand holds point x,y,z from side dx,dy,dz (default 0,0,-1 = behind;
+              the side's length is the distance in half arm widths, 1 = the point on the hand's surface),
               and before the grab time it reaches for where the thing will be then (Old Classic: "BarrelShort SHELLS 900 0,0,-1.75")
             armRightCarryKeys, armLeftCarryKeys: how much the hand is on the carried thing, per animation:
               "RELOAD 650:0 900:1 1300:1 1500:0" = ms:weight; ms:weight/b takes the thing where the bus has it at b ms
@@ -197,6 +213,14 @@ public final class Config {
         cameraScale = num(p, "cameraScale", cameraScale);
         cameraTime = Math.max(0.05F, num(p, "cameraTime", cameraTime));
         cameraShake = num(p, "cameraShake", cameraShake);
+        cameraPitch = p.getProperty("cameraPitch", cameraPitch).trim();
+        cameraYaw = p.getProperty("cameraYaw", cameraYaw).trim();
+        cameraRoll = p.getProperty("cameraRoll", cameraRoll).trim();
+        kickPitch = p.getProperty("kickPitch", kickPitch).trim();
+        kickYaw = p.getProperty("kickYaw", kickYaw).trim();
+        kickRoll = p.getProperty("kickRoll", kickRoll).trim();
+        kickPosY = p.getProperty("kickPosY", kickPosY).trim();
+        kickPosZ = p.getProperty("kickPosZ", kickPosZ).trim();
         modelKick = num(p, "modelKick", modelKick);
         modelRotate = num(p, "modelRotate", modelRotate);
         modelSpeed = Math.max(0.05F, num(p, "modelSpeed", modelSpeed));
@@ -222,6 +246,8 @@ public final class Config {
         armPartLeft = p.getProperty("armPartLeft", armPartLeft).trim();
         armReleaseLeft = p.getProperty("armReleaseLeft", armReleaseLeft).trim();
         armReleaseMove = vec(p, "armReleaseMove", armReleaseMove);
+        armReleaseRight = p.getProperty("armReleaseRight", armReleaseRight).trim();
+        armReleaseMoveRight = vec(p, "armReleaseMoveRight", armReleaseMoveRight);
         armLeftKeys = p.getProperty("armLeftKeys", armLeftKeys).trim();
         armRightCarry = p.getProperty("armRightCarry", armRightCarry).trim();
         armRightCarryKeys = p.getProperty("armRightCarryKeys", armRightCarryKeys).trim();
@@ -231,6 +257,8 @@ public final class Config {
         armBaseLeft = num(p, "armBaseLeft", armBaseLeft);
         armLoadScaleRight = num(p, "armLoadScaleRight", armLoadScaleRight);
         armLoadScaleLeft = num(p, "armLoadScaleLeft", armLoadScaleLeft);
+        armLoadRollRight = num(p, "armLoadRollRight", armLoadRollRight);
+        armLoadRollLeft = num(p, "armLoadRollLeft", armLoadRollLeft);
         smokeUpright = Boolean.parseBoolean(p.getProperty("smokeUpright", Boolean.toString(smokeUpright)).trim());
         smokeWidth = num(p, "smokeWidth", smokeWidth);
         armScaleRight = num(p, "armScaleRight", armScaleRight);
@@ -254,6 +282,14 @@ public final class Config {
         p.setProperty("cameraScale", Float.toString(cameraScale));
         p.setProperty("cameraTime", Float.toString(cameraTime));
         p.setProperty("cameraShake", Float.toString(cameraShake));
+        p.setProperty("cameraPitch", cameraPitch);
+        p.setProperty("cameraYaw", cameraYaw);
+        p.setProperty("cameraRoll", cameraRoll);
+        p.setProperty("kickPitch", kickPitch);
+        p.setProperty("kickYaw", kickYaw);
+        p.setProperty("kickRoll", kickRoll);
+        p.setProperty("kickPosY", kickPosY);
+        p.setProperty("kickPosZ", kickPosZ);
         p.setProperty("modelKick", Float.toString(modelKick));
         p.setProperty("modelRotate", Float.toString(modelRotate));
         p.setProperty("modelSpeed", Float.toString(modelSpeed));
@@ -279,6 +315,8 @@ public final class Config {
         p.setProperty("armPartLeft", armPartLeft);
         p.setProperty("armReleaseLeft", armReleaseLeft);
         p.setProperty("armReleaseMove", armReleaseMove[0] + "," + armReleaseMove[1] + "," + armReleaseMove[2]);
+        p.setProperty("armReleaseRight", armReleaseRight);
+        p.setProperty("armReleaseMoveRight", armReleaseMoveRight[0] + "," + armReleaseMoveRight[1] + "," + armReleaseMoveRight[2]);
         p.setProperty("armLeftKeys", armLeftKeys);
         p.setProperty("armRightCarry", armRightCarry);
         p.setProperty("armRightCarryKeys", armRightCarryKeys);
@@ -288,6 +326,8 @@ public final class Config {
         p.setProperty("armBaseLeft", Float.toString(armBaseLeft));
         p.setProperty("armLoadScaleRight", Float.toString(armLoadScaleRight));
         p.setProperty("armLoadScaleLeft", Float.toString(armLoadScaleLeft));
+        p.setProperty("armLoadRollRight", Float.toString(armLoadRollRight));
+        p.setProperty("armLoadRollLeft", Float.toString(armLoadRollLeft));
         p.setProperty("smokeUpright", Boolean.toString(smokeUpright));
         p.setProperty("smokeWidth", Float.toString(smokeWidth));
         p.setProperty("armScaleRight", Float.toString(armScaleRight));

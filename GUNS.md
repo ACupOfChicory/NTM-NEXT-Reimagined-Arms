@@ -8,7 +8,7 @@
 
 - [ ] **Debug** — точки: gun_debug (`gun_debug`)
 - [ ] **Atlas** — точки: Револьвер переломного действия (`gun_light_revolver`), Револьвер "Atlas" (`gun_light_revolver_atlas`)
-- [ ] **Henry** — по умолчанию: Винтовка рычажного действия (`gun_henry`), Винтовка "Lincoln's Repeater" (`gun_henry_lincoln`)
+- [x] **Henry** — настроен, Lincoln тоже: при осмотре правая рука замирает, левая отходит, обе ловят винтовку; левая рука заталкивает патроны в трубку спереди (без наклона −55° при заряжании); отдача винтовочная (кривые Springfield 1873 из TaCZ, полегче): Винтовка рычажного действия (`gun_henry`), Винтовка "Lincoln's Repeater" (`gun_henry_lincoln`)
 - [ ] **HeavyRevolver** — точки: Тяжёлый револьвер (`gun_heavy_revolver`), Револьвер "Little Macintosh" (`gun_heavy_revolver_lilmac`), Револьвер "Protège" (`gun_heavy_revolver_protege`)
 - [ ] **Hangman** — точки: Винтовка "Hangman" (`gun_hangman`)
 - [x] **Maresleg** — настроен, обрез (hacksaw) и Broken тоже: левая рука отпускает при перевороте, в прицеле — анимация полной версии: Дробовик рычажного действия (`gun_maresleg`), Дробовик "Broken" (`gun_maresleg_broken`)

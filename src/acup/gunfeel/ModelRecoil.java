@@ -15,7 +15,11 @@ import net.minecraft.util.Mth;
 // the gun's NTM recoil strength. Yaw and roll get a random direction and size per shot. Light guns
 // play the curve faster. Overlapping shots add up. Rotation pivots on the right-hand grip.
 public final class ModelRecoil {
-    private record Shot(long start, float strength, float speed, float pitch, float yaw, float roll) {
+    private record Shot(long start, float strength, float speed, float pitch, float yaw, float roll,
+            Curve cPitch, Curve cYaw, Curve cRoll, Curve cY, Curve cZ) {
+        float length() {
+            return Math.max(Math.max(cPitch.length(), cYaw.length()), Math.max(cRoll.length(), Math.max(cY.length(), cZ.length())));
+        }
     }
 
     private static final Random RANDOM = new Random();
@@ -37,7 +41,9 @@ public final class ModelRecoil {
         SHOTS.add(new Shot(System.nanoTime(), s, speed,
                 0.85F + 0.3F * RANDOM.nextFloat(),
                 loose * (RANDOM.nextBoolean() ? 1F : -1F) * (0.5F + 0.7F * RANDOM.nextFloat()),
-                loose * (RANDOM.nextBoolean() ? 1F : -1F) * (0.6F + 0.6F * RANDOM.nextFloat())));
+                loose * (RANDOM.nextBoolean() ? 1F : -1F) * (0.6F + 0.6F * RANDOM.nextFloat()),
+                Curve.of(Config.kickPitch, Curve.PITCH), Curve.of(Config.kickYaw, Curve.YAW), Curve.of(Config.kickRoll, Curve.ROLL),
+                Curve.of(Config.kickPosY, Curve.POS_Y), Curve.of(Config.kickPosZ, Curve.POS_Z)));
     }
 
     // Pose is in NTM's gun frame before the model scale: +Z forward, +Y up. size = gun length there.
@@ -48,15 +54,15 @@ public final class ModelRecoil {
         for (int i = SHOTS.size() - 1; i >= 0; i--) {
             Shot s = SHOTS.get(i);
             float t = (now - s.start) / 1e9F * s.speed;
-            if (t >= Curve.PITCH.length()) {
+            if (t >= s.length()) {
                 SHOTS.remove(i);
                 continue;
             }
-            pitch += Curve.PITCH.at(t) * s.strength * s.pitch;
-            yaw += Curve.YAW.at(t) * s.strength * s.yaw;
-            roll += Curve.ROLL.at(t) * s.strength * s.roll;
-            y += Curve.POS_Y.at(t) * s.strength;
-            z += Curve.POS_Z.at(t) * s.strength;
+            pitch += s.cPitch.at(t) * s.strength * s.pitch;
+            yaw += s.cYaw.at(t) * s.strength * s.yaw;
+            roll += s.cRoll.at(t) * s.strength * s.roll;
+            y += s.cY.at(t) * s.strength;
+            z += s.cZ.at(t) * s.strength;
         }
         float px = size * 0.016F; // one kick unit (1/16 of the gun length scale) in this frame
         pose.translate(0F, y * px, -z * px);

@@ -355,14 +355,15 @@ public final class Arms {
                 Matrix4f within = new Matrix4f(cameraInv).mul(FOLLOW[2 + i]);
                 Carry c = carry(i);
                 Vector3f at = within.transformPosition(carried[1], carried[2], carried[3], new Vector3f());
-                Vector3f side = within.transformDirection(new Vector3f(c.dir)).normalize();
+                // the side's length is the hand's distance from the point, in half arm widths (1 = the hand touches it)
+                Vector3f side = within.transformDirection(new Vector3f(c.dir)).normalize().mul(new Vector3f(c.dir).length());
                 Vector3f p = new Vector3f(g).lerp(at, carried[0]);
                 Vector3f off = new Vector3f(down).lerp(side, carried[0]);
                 if (off.lengthSquared() < 1e-6F) off.set(side);
                 // the arm sized and aimed as if it rested at the carrying spot (a hand near the camera is thinner
                 // than one reaching far forward), blended with the arm on the gun by the carry weight
                 ArmRest there = new ArmRest();
-                restArm(there, right, slim, p, off.normalize(), p, axisPoint,
+                restArm(there, right, slim, p, off, p, axisPoint,
                         right ? Config.armDirRight : Config.armDirLeft, right ? Config.armReachRight : Config.armReachLeft,
                         right ? Config.armLoadScaleRight : Config.armLoadScaleLeft);
                 ArmRest mix = r;
@@ -379,15 +380,20 @@ public final class Arms {
                     mix.center.set(r.center);
                     mix.local.set(r.local);
                 }
+                // a hand loading shells may turn differently around its own axis (armLoadRollRight/Left)
+                float holdRoll = right ? Config.armRollRight : Config.armRollLeft;
+                float loadRoll = right ? Config.armLoadRollRight : Config.armLoadRollLeft;
+                rollNow = Float.isNaN(loadRoll) ? Float.NaN : holdRoll + (loadRoll - holdRoll) * carried[0];
                 arm(collector, light, arm, skin, slim, right, p, null, geometry.fraction(grip[i][2]), bodyInCamera, off, p, false,
                         new Quaternionf(), 0F, axisPoint, mix, sleeveShown, sleeve);
+                rollNow = Float.NaN;
                 continue;
             }
-            // The left hand lets go while the gun spins (sawn-off Maresleg cocking): it keeps its rest pose,
+            // A hand lets go while the gun spins (sawn-off Maresleg cocking, Henry inspect): it keeps its rest pose,
             // moves aside and back, and takes the gun again when the turn is complete.
-            float release = right ? 0F : release();
+            float release = release(right ? Config.armReleaseRight : Config.armReleaseLeft);
             if (release > 0F) {
-                float[] m = Config.armReleaseMove;
+                float[] m = right ? Config.armReleaseMoveRight : Config.armReleaseMove;
                 float k = (0.5F - 0.5F * (float) Math.cos(2.0 * Math.PI * release)) / 16F * r.s;
                 Matrix4f moved = new Matrix4f().translate(m[0] * k, m[1] * k, m[2] * k).mul(r.local);
                 submit(collector, light, arm, skin, new Matrix4f(CAMERA).mul(moved), sleeveShown, sleeve);
@@ -645,10 +651,13 @@ public final class Arms {
         return new Vector3f(c.at[0], c.at[1], c.at[2]).add(geometry.toAligned.transform(new Vector3f(key[4], key[5], key[6])));
     }
 
-    // progress (0..1) of the turn on the armReleaseLeft bus while the left hand is off the gun, else 0
-    private static float release() {
-        if (Config.armReleaseLeft.isEmpty() || HbmAnimations.getRelevantAnim(0) == null) return 0F;
-        double turns = Math.abs(HbmAnimations.getRelevantTransformation(Config.armReleaseLeft)[0]) / 360.0;
+    // progress (0..1) of the turn on a release bus (armReleaseLeft / armReleaseRight) while the hand is off the gun,
+    // else 0; the turn is on whichever axis the bus rotates (Maresleg FLIP: x, Henry ROLL: z)
+    private static float release(String bus) {
+        if (bus.isEmpty() || HbmAnimations.getRelevantAnim(0) == null) return 0F;
+        double[] t = HbmAnimations.getRelevantTransformation(bus);
+        double angle = Math.max(Math.abs(t[0]), Math.max(Math.abs(t[1]), Math.abs(t[2])));
+        double turns = angle / 360.0;
         float p = (float) (turns - Math.floor(turns));
         return p > 1e-3F && p < 1F - 1e-3F ? p : 0F;
     }
@@ -709,6 +718,9 @@ public final class Arms {
         rest.local.set(local(hand, new Quaternionf(), dir, right, slim, s, length));
     }
 
+    // roll of the arm being drawn instead of armRollRight/Left, NaN = those (set while a hand carries shells)
+    private static float rollNow = Float.NaN;
+
     // arm cube placed with its hand end at `hand`, built along `dir` (hand -> shoulder), then turned by `turn`
     private static Matrix4f local(Vector3f hand, Quaternionf turn, Vector3f dir, boolean right, boolean slim, float s, float length) {
         Vector3f y = new Vector3f(dir).negate().normalize();
@@ -727,7 +739,7 @@ public final class Arms {
                 .translate(hand)
                 .rotate(turn)
                 .mul(basis)
-                .rotateY((float) Math.toRadians(right ? Config.armRollRight : Config.armRollLeft))
+                .rotateY((float) Math.toRadians(!Float.isNaN(rollNow) ? rollNow : right ? Config.armRollRight : Config.armRollLeft))
                 .scale(s, length / end, s)
                 .translate(-cx, -end, 0F);
     }

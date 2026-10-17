@@ -4,8 +4,8 @@ license = "MIT"
 
 [[mods]]
 modId = "ntmgunfeel"
-version="0.1.40-alpha"
-displayName = "NTM Gun Feel"
+version="0.1.44-alpha"
+displayName = "NTM-NEXT Reimagined Arms"
 description = "HBM NTM guns: hold-to-aim (server), smooth camera recoil, spring model recoil, centred hip position, hidden off-hand item and corner ammo HUD (client)."
 
 [[mixins]]
