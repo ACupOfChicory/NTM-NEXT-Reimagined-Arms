@@ -1,4 +1,4 @@
-# NTM-NEXT Modern Arms
+# NTM-NEXT Reimagined Arms
 
 Addon for HBM's Nuclear Tech Mod (NTM-NEXT, NeoForge 26.2) that makes its guns feel like a modern
 shooter mod without new animations and without touching the NTM jar. Mixins only.
