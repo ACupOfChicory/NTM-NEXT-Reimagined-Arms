@@ -68,11 +68,23 @@ public final class PassableClip extends ClipContext {
         return level.isClientSide() ? "client" : "server";
     }
 
+    // NTM's multiblock shapes name the block that holds the hit point (BlockPos.containing): a point on the top face
+    // of a block (the elevator's platform on its base) is then put in the block above it. The block whose face it is.
+    private static BlockHitResult owner(BlockHitResult hit) {
+        Direction f = hit.getDirection();
+        BlockPos pos = hit.getBlockPos();
+        double at = hit.getLocation().get(f.getAxis()), lo = pos.get(f.getAxis());
+        boolean onFar = f.getAxisDirection() == Direction.AxisDirection.POSITIVE ? at == lo : at == lo + 1;
+        if (!onFar || hit.isInside()) return hit;
+        return new BlockHitResult(hit.getLocation(), f, pos.relative(f.getOpposite()), false);
+    }
+
     private static BlockHitResult clip0(Level level, Vec3 from, Vec3 to) {
         Set<BlockPos> skip = new HashSet<>();
         for (int i = 0; i < 16; i++) {
             BlockHitResult hit = level.clip(new PassableClip(from, to, skip));
             if (hit.getType() == HitResult.Type.MISS) return hit;
+            hit = owner(hit);
             BlockState state = level.getBlockState(hit.getBlockPos());
             if (debug)
                 org.slf4j.LoggerFactory.getLogger("ntm-gunfeel").info("[holedebug]   {} step {}: {} {} face={} at={} inside={} shape={} cells={}{}", side(level), i, hit.getBlockPos(), key(state),
