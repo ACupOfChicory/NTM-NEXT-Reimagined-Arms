@@ -85,8 +85,9 @@ public final class RenderedMesh {
     };
 
     // a drawn triangle: corners in world space, their texture coordinates, its texture; oneSided = drawn with back
-    // faces culled; moving = drawn by a renderer (may move: a door's leaf), not a block model
-    public record Tri(double[] p, float[] uv, Tex tex, boolean oneSided, boolean moving) {
+    // faces culled; moving = drawn by a renderer (may move: a door's leaf), not a block model; anchor = the part of
+    // the renderer it belongs to and that part's pose then (null: a block model, or a part that can not be followed)
+    public record Tri(double[] p, float[] uv, Tex tex, boolean oneSided, boolean moving, @Nullable Anchor anchor) {
         public Vector3d corner(int i) {
             return new Vector3d(p[i * 3], p[i * 3 + 1], p[i * 3 + 2]);
         }
@@ -140,6 +141,43 @@ public final class RenderedMesh {
     private record Got(long at, List<Tri> tris) {
     }
 
+    // One part a renderer submits (a door's leaf): the same each frame by its render type, the drawing code and the
+    // objects it draws from (model, mesh), and how many alike came before it
+    public record PartKey(Object type, Class<?> code, List<Object> from, int n) {
+    }
+
+    // the part a triangle was drawn as, at block entity `be`, with the part's pose then (relative to `be`)
+    public record Anchor(BlockPos be, PartKey key, org.joml.Matrix4fc pose) {
+    }
+
+    // where a part is now: its pose relative to its block entity, and the planes NTM cuts it with (a leaf sliding
+    // into its frame), in the part's own space: kept where n . p - d >= 0; null = not cut
+    public record PartPose(org.joml.Matrix4fc pose, float @Nullable [][] planes) {
+    }
+
+    private static final Map<BlockPos, Map<PartKey, PartPose>> POSES = new HashMap<>();
+    private static long posesAt;
+
+    // the parts block entity `pos` draws now, run once a frame (only the poses: nothing is drawn); null = no block
+    // entity there with a renderer that can be read
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    public static @Nullable Map<PartKey, PartPose> poses(ClientLevel level, BlockPos pos, long frame) {
+        if (frame != posesAt) {
+            POSES.clear();
+            posesAt = frame;
+        }
+        if (POSES.containsKey(pos)) return POSES.get(pos);
+        Map<PartKey, PartPose> got = null;
+        BlockEntity be = level.getBlockEntity(pos);
+        BlockEntityRenderer renderer = be == null ? null : Minecraft.getInstance().getBlockEntityRenderDispatcher().getRenderer(be);
+        if (renderer != null && !FAILED.contains(renderer.getClass())) {
+            Recorder rec = record(be, renderer);
+            if (rec != null) got = rec.poses;
+        }
+        POSES.put(pos.immutable(), got);
+        return got;
+    }
+
     // what each block entity drew, kept a moment: one burst into a machine reads it once
     private static final Map<BlockPos, Got> CACHE = new HashMap<>();
     private static final long FRESH = 250_000_000L;
@@ -186,11 +224,33 @@ public final class RenderedMesh {
 
     // true while a renderer is run here: NTM's hasVisual answers no, so its renderer draws what Flywheel would (the
     // press head, at its height)
-    public static boolean capturing;
+    // (only on the thread reading it: Flywheel may ask from its own threads meanwhile)
+    private static volatile Thread capturing;
+
+    public static boolean capturingHere() {
+        return capturing == Thread.currentThread();
+    }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
     private static List<Tri> capture(BlockEntity be, BlockEntityRenderer renderer) {
-        capturing = true;
+        Recorder rec = record(be, renderer);
+        if (rec == null) return List.of();
+        try {
+            List<Tri> out = new ArrayList<>();
+            BlockPos o = be.getBlockPos();
+            for (Recorder.Part part : rec.parts) part.emit(out, o);
+            return out;
+        } catch (Throwable t) {
+            FAILED.add(renderer.getClass());
+            GunFeel.LOGGER.warn("Could not read what {} draws: bullet holes go on the hitbox of its blocks", renderer.getClass().getName(), t);
+            return List.of();
+        }
+    }
+
+    // the renderer run into a recorder: what it submits, not drawn yet
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static @Nullable Recorder record(BlockEntity be, BlockEntityRenderer renderer) {
+        capturing = Thread.currentThread();
         try {
             Minecraft mc = Minecraft.getInstance();
             Vec3 cam = mc.gameRenderer.mainCamera().position();
@@ -204,16 +264,13 @@ public final class RenderedMesh {
             camera.initialized = true;
             Recorder rec = new Recorder();
             renderer.submit(state, new PoseStack(), rec, camera);
-            List<Tri> out = new ArrayList<>();
-            BlockPos o = be.getBlockPos();
-            for (Recorder.Part part : rec.parts) part.emit(out, o);
-            return out;
+            return rec;
         } catch (Throwable t) {
             FAILED.add(renderer.getClass());
             GunFeel.LOGGER.warn("Could not read what {} draws: bullet holes go on the hitbox of its blocks", renderer.getClass().getName(), t);
-            return List.of();
+            return null;
         } finally {
-            capturing = false;
+            capturing = null;
         }
     }
 
@@ -381,6 +438,52 @@ public final class RenderedMesh {
         }
     }
 
+    // what a drawing lambda holds: the objects it draws from (model, mesh: not numbers such as light or a group, not
+    // the cut planes, which change as the part moves) and the cut planes. known = its fields could be read
+    private record Captured(List<Object> from, float @Nullable [][] planes, boolean known) {
+    }
+
+    private static final Map<Class<?>, Field[]> FIELDS = new HashMap<>();
+
+    private static Captured captured(Object lambda) {
+        Field[] fields = FIELDS.computeIfAbsent(lambda.getClass(), c -> {
+            try {
+                Field[] fs = c.getDeclaredFields();
+                for (Field f : fs) f.setAccessible(true);
+                return fs;
+            } catch (Throwable t) {
+                return null;
+            }
+        });
+        if (fields == null) return new Captured(List.of(), null, false);
+        List<Object> from = new ArrayList<>();
+        float[][] planes = null;
+        try {
+            for (Field f : fields) {
+                if (java.lang.reflect.Modifier.isStatic(f.getModifiers()) || f.getType().isPrimitive()) continue;
+                Object v = f.get(lambda);
+                if (v instanceof float[][] fp) planes = fp;
+                else if (v != null && !(v instanceof Number) && !v.getClass().isArray()) from.add(new Same(v));
+            }
+        } catch (Throwable t) {
+            return new Captured(List.of(), null, false);
+        }
+        return new Captured(from, planes, true);
+    }
+
+    // compared by identity: the same model object
+    private record Same(Object o) {
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Same s && s.o == o;
+        }
+
+        @Override
+        public int hashCode() {
+            return System.identityHashCode(o);
+        }
+    }
+
     // ---- the recorder: keeps what is submitted, then draws it into Capture
 
     private static final class Recorder implements SubmitNodeCollector {
@@ -389,6 +492,8 @@ public final class RenderedMesh {
         }
 
         final List<Part> parts = new ArrayList<>();
+        final Map<PartKey, PartPose> poses = new HashMap<>();
+        private final Map<List<Object>, Integer> alike = new HashMap<>();
 
         @Override
         public OrderedSubmitNodeCollector order(int order) {
@@ -398,8 +503,17 @@ public final class RenderedMesh {
         @Override
         public void submitCustomGeometry(PoseStack poseStack, RenderType type, CustomGeometryRenderer renderer) {
             PoseStack.Pose pose = poseStack.last().copy();
+            Captured got = captured(renderer);
+            List<Object> sig = new ArrayList<>();
+            sig.add(type);
+            sig.add(renderer.getClass());
+            sig.addAll(got.from());
+            int n = alike.merge(sig, 1, Integer::sum) - 1;
+            PartKey key = got.known() ? new PartKey(type, renderer.getClass(), got.from(), n) : null;
+            org.joml.Matrix4f now = new org.joml.Matrix4f(pose.pose());
+            if (key != null) poses.put(key, new PartPose(now, got.planes()));
             parts.add((out, o) -> {
-                Capture c = new Capture(type, texOf(type), o, out);
+                Capture c = new Capture(type, texOf(type), o, out, key == null ? null : new Anchor(o.immutable(), key, now));
                 renderer.render(pose, c);
                 c.finish();
             });
@@ -494,8 +608,8 @@ public final class RenderedMesh {
     }
 
     private static void quad(List<Tri> out, double[] p, float[] uv, Tex tex, boolean cull, boolean moving) {
-        out.add(new Tri(new double[] {p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8]}, new float[] {uv[0], uv[1], uv[2], uv[3], uv[4], uv[5]}, tex, cull, moving));
-        out.add(new Tri(new double[] {p[0], p[1], p[2], p[6], p[7], p[8], p[9], p[10], p[11]}, new float[] {uv[0], uv[1], uv[4], uv[5], uv[6], uv[7]}, tex, cull, moving));
+        out.add(new Tri(new double[] {p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8]}, new float[] {uv[0], uv[1], uv[2], uv[3], uv[4], uv[5]}, tex, cull, moving, null));
+        out.add(new Tri(new double[] {p[0], p[1], p[2], p[6], p[7], p[8], p[9], p[10], p[11]}, new float[] {uv[0], uv[1], uv[4], uv[5], uv[6], uv[7]}, tex, cull, moving, null));
     }
 
     // collects the vertices a renderer writes (position, texture coordinates), then cuts them into triangles
@@ -505,15 +619,21 @@ public final class RenderedMesh {
         private final boolean cull;
         private final BlockPos origin;
         private final List<Tri> out;
+        private final @Nullable Anchor anchor;
         private float[] v = new float[5 * 64];
         private int n;
 
         Capture(RenderType type, Tex tex, BlockPos origin, List<Tri> out) {
+            this(type, tex, origin, out, null);
+        }
+
+        Capture(RenderType type, Tex tex, BlockPos origin, List<Tri> out, @Nullable Anchor anchor) {
             this.topology = type.primitiveTopology();
             this.tex = tex;
             this.cull = type.pipeline().isCull();
             this.origin = origin;
             this.out = out;
+            this.anchor = anchor;
         }
 
         @Override
@@ -577,7 +697,7 @@ public final class RenderedMesh {
                 uv[i * 2] = v[k + 3];
                 uv[i * 2 + 1] = v[k + 4];
             }
-            out.add(new Tri(p, uv, tex, cull, true));
+            out.add(new Tri(p, uv, tex, cull, true, anchor));
         }
 
         void finish() {

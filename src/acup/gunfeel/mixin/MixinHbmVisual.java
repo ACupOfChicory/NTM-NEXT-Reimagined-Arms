@@ -18,6 +18,6 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 public abstract class MixinHbmVisual {
     @Inject(method = "hasVisual", at = @At("HEAD"), cancellable = true, require = 0)
     private static void gunfeel$noVisualWhileRead(BlockEntity be, CallbackInfoReturnable<Boolean> cir) {
-        if (RenderedMesh.capturing) cir.setReturnValue(false);
+        if (RenderedMesh.capturingHere()) cir.setReturnValue(false);
     }
 }

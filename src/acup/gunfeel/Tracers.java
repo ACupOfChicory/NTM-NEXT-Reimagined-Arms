@@ -97,7 +97,134 @@ public final class Tracers {
     // mask = which 1/16-block cells of the face show the block's pixels (null = all): cells mask.w x mask.h from
     // cell (u0, v0) on the face's two axes, in 1/16 blocks
     private record Hole(Vec3 pos, Direction face, int turn, long born, int light, int kind, float size, double[] rect, Mask mask, double plane, boolean late, boolean cull,
-            float[] mesh, boolean front, BlockPos block, BlockState state, boolean drawn) {
+            float[] mesh, boolean front, BlockPos block, BlockState state, boolean drawn, Follow follow) {
+    }
+
+    // A hole on a part a renderer moves (a door's leaf, a press head): kept in the part's own space and put where the
+    // part is each frame, cut where NTM cuts the part (a leaf sliding into its frame). model = as Hole.mesh, but
+    // positions in the part's space; mesh, pos, light = where it is now (mesh null: cut away whole)
+    private static final class Follow {
+        final BlockPos be;
+        final RenderedMesh.PartKey key;
+        final float[] model;
+        final Vector3f center;
+        Vec3 pos;
+        float[] mesh;
+        int light;
+        private org.joml.Matrix4f placed;
+        private float[][] cut;
+
+        Follow(RenderedMesh.Anchor a, Vector3d world, float[] mesh, int light) {
+            be = a.be();
+            key = a.key();
+            org.joml.Matrix4f inv = new org.joml.Matrix4f(a.pose()).invert();
+            Vector3f c = new Vector3f((float) (world.x - be.getX()), (float) (world.y - be.getY()), (float) (world.z - be.getZ()));
+            center = inv.transformPosition(c, new Vector3f());
+            model = mesh.clone();
+            Vector3f n = inv.transformDirection(new Vector3f(mesh[0], mesh[1], mesh[2]), new Vector3f()).normalize();
+            model[0] = n.x;
+            model[1] = n.y;
+            model[2] = n.z;
+            for (int k = 3; k < model.length; ) {
+                int count = (int) model[k++];
+                for (int i = 0; i < count; i++, k += 5) {
+                    Vector3f v = inv.transformPosition(c.x + mesh[k], c.y + mesh[k + 1], c.z + mesh[k + 2], new Vector3f());
+                    model[k] = v.x;
+                    model[k + 1] = v.y;
+                    model[k + 2] = v.z;
+                }
+            }
+            placed = new org.joml.Matrix4f(a.pose());
+            pos = new Vec3(world.x, world.y, world.z);
+            this.mesh = mesh;
+            this.light = light;
+        }
+
+        void place(ClientLevel level, RenderedMesh.PartPose now) {
+            if (now.pose().equals(placed) && java.util.Arrays.deepEquals(now.planes(), cut)) return;
+            placed = new org.joml.Matrix4f(now.pose());
+            cut = now.planes() == null ? null : copy(now.planes());
+            Vector3f c = placed.transformPosition(center, new Vector3f());
+            Vec3 at = new Vec3(be.getX() + c.x, be.getY() + c.y, be.getZ() + c.z);
+            Vector3f n = placed.transformDirection(new Vector3f(model[0], model[1], model[2]), new Vector3f()).normalize();
+            List<float[]> polys = new ArrayList<>();
+            for (int k = 3; k < model.length; ) {
+                int count = (int) model[k++];
+                List<float[]> poly = new ArrayList<>(count);
+                for (int i = 0; i < count; i++, k += 5) poly.add(new float[] {model[k], model[k + 1], model[k + 2], model[k + 3], model[k + 4]});
+                if (cut != null) for (float[] plane : cut) poly = keep(poly, plane);
+                if (poly.size() < 3) continue;
+                float[] out = new float[poly.size() * 5];
+                for (int i = 0; i < poly.size(); i++) {
+                    float[] v = poly.get(i);
+                    Vector3f w = placed.transformPosition(v[0], v[1], v[2], new Vector3f());
+                    out[i * 5] = w.x - c.x;
+                    out[i * 5 + 1] = w.y - c.y;
+                    out[i * 5 + 2] = w.z - c.z;
+                    out[i * 5 + 3] = v[3];
+                    out[i * 5 + 4] = v[4];
+                }
+                polys.add(out);
+            }
+            if (polys.isEmpty()) {
+                mesh = null;
+            } else {
+                int size = 3;
+                for (float[] pl : polys) size += 1 + pl.length;
+                float[] m = new float[size];
+                m[0] = n.x;
+                m[1] = n.y;
+                m[2] = n.z;
+                int k = 3;
+                for (float[] pl : polys) {
+                    m[k++] = pl.length / 5;
+                    System.arraycopy(pl, 0, m, k, pl.length);
+                    k += pl.length;
+                }
+                mesh = m;
+            }
+            if (at.distanceToSqr(pos) > 1e-4) light = LightCoordsUtil.getLightCoords(level, BlockPos.containing(at.x + n.x * 0.05, at.y + n.y * 0.05, at.z + n.z * 0.05));
+            pos = at;
+        }
+
+        private static float[][] copy(float[][] a) {
+            float[][] o = new float[a.length][];
+            for (int i = 0; i < a.length; i++) o[i] = a[i].clone();
+            return o;
+        }
+
+        // the polygon's part on the kept side of the plane (n . p - d >= 0), texture coordinates carried along
+        private static List<float[]> keep(List<float[]> poly, float[] plane) {
+            List<float[]> out = new ArrayList<>(poly.size() + 2);
+            for (int i = 0; i < poly.size(); i++) {
+                float[] a = poly.get(i), b = poly.get((i + 1) % poly.size());
+                float da = a[0] * plane[0] + a[1] * plane[1] + a[2] * plane[2] - plane[3];
+                float db = b[0] * plane[0] + b[1] * plane[1] + b[2] * plane[2] - plane[3];
+                if (da >= 0) out.add(a);
+                if ((da >= 0) != (db >= 0)) {
+                    float t = da / (da - db);
+                    float[] m = new float[5];
+                    for (int j = 0; j < 5; j++) m[j] = a[j] + (b[j] - a[j]) * t;
+                    out.add(m);
+                }
+            }
+            return out;
+        }
+    }
+
+    // holes on moving parts put where their part is this frame; gone with the part (the block entity gone, the part
+    // no longer drawn)
+    private static void follow(ClientLevel level, long now) {
+        HOLES.removeIf(h -> {
+            Follow f = h.follow();
+            if (f == null) return false;
+            var poses = RenderedMesh.poses(level, f.be, now);
+            if (poses == null) return true;
+            RenderedMesh.PartPose pp = poses.get(f.key);
+            if (pp == null) return true;
+            f.place(level, pp);
+            return false;
+        });
     }
 
     // plane = where on the face's axis the block's pixels are (NaN = the hit point's)
@@ -352,7 +479,7 @@ public final class Tracers {
         double onAxis = Double.isNaN(plane) ? comp(hit.getLocation(), hit.getDirection().getAxis().ordinal()) : plane;
         boolean cull = level.getBlockState(hit.getBlockPos()).isCollisionShapeFullBlock(level, hit.getBlockPos()) || Math.abs(onAxis - boxFace) < 1e-3;
         HOLES.addLast(new Hole(hit.getLocation(), hit.getDirection(), (int) (Math.random() * 8), System.nanoTime(), light, kind, size, rect, mask, plane, translucent(level.getBlockState(hit.getBlockPos())),
-                cull, null, false, hit.getBlockPos().immutable(), level.getBlockState(hit.getBlockPos()), false));
+                cull, null, false, hit.getBlockPos().immutable(), level.getBlockState(hit.getBlockPos()), false, null));
         while (HOLES.size() > Math.max(1, Config.holeMax)) HOLES.removeFirst();
     }
 
@@ -443,7 +570,7 @@ public final class Tracers {
         Vec3 world = new Vec3(pos.getX() + at.x, pos.getY() + at.y, pos.getZ() + at.z);
         int light = LightCoordsUtil.getLightCoords(level, pos);
         HOLES.addLast(new Hole(world, hit.getDirection(), turn, System.nanoTime(), light, kind, size, null, null, Double.NaN, false, false, mesh,
-                onBoxFace(level, pos, at, normal), pos.immutable(), level.getBlockState(pos), false));
+                onBoxFace(level, pos, at, normal), pos.immutable(), level.getBlockState(pos), false, null));
         while (HOLES.size() > Math.max(1, Config.holeMax)) HOLES.removeFirst();
     }
 
@@ -575,8 +702,9 @@ public final class Tracers {
         }
         BlockPos lightAt = BlockPos.containing(world.x + normal.x * 0.05, world.y + normal.y * 0.05, world.z + normal.z * 0.05);
         int light = LightCoordsUtil.getLightCoords(level, lightAt);
+        Follow follow = met.anchor() == null ? null : new Follow(met.anchor(), world, mesh, light);
         HOLES.addLast(new Hole(new Vec3(world.x, world.y, world.z), hit.getDirection(), turn, System.nanoTime(), light, kind, size, null, null, Double.NaN, false, false, mesh,
-                met.oneSided(), pos.immutable(), level.getBlockState(pos), met.moving()));
+                met.oneSided(), pos.immutable(), level.getBlockState(pos), met.moving(), follow));
         while (HOLES.size() > Math.max(1, Config.holeMax)) HOLES.removeFirst();
         return true;
     }
@@ -705,16 +833,20 @@ public final class Tracers {
     }
 
     private static void meshQuads(PoseStack.Pose p, VertexConsumer vc, Hole h, Vec3 cam, int alpha) {
-        float[] m = h.mesh();
+        Follow f = h.follow();
+        float[] m = f != null ? f.mesh : h.mesh();
+        if (m == null) return;
+        Vec3 pos = f != null ? f.pos : h.pos();
+        int light = f != null ? f.light : h.light();
         float nx = m[0], ny = m[1], nz = m[2];
         // towards the camera, as in quad(); a one-sided hole seen from behind is not drawn
-        if ((cam.x - h.pos().x) * nx + (cam.y - h.pos().y) * ny + (cam.z - h.pos().z) * nz < 0) {
+        if ((cam.x - pos.x) * nx + (cam.y - pos.y) * ny + (cam.z - pos.z) * nz < 0) {
             if (h.front()) return;
             nx = -nx;
             ny = -ny;
             nz = -nz;
         }
-        float bx = (float) (h.pos().x - cam.x) + nx * 0.002F, by = (float) (h.pos().y - cam.y) + ny * 0.002F, bz = (float) (h.pos().z - cam.z) + nz * 0.002F;
+        float bx = (float) (pos.x - cam.x) + nx * 0.002F, by = (float) (pos.y - cam.y) + ny * 0.002F, bz = (float) (pos.z - cam.z) + nz * 0.002F;
         int color = (alpha << 24) | 0xFFFFFF;
         int k = 3;
         while (k < m.length) {
@@ -726,7 +858,7 @@ public final class Tracers {
                 for (int j : idx) {
                     int o = base + j * 5;
                     vc.addVertex(p, bx + m[o], by + m[o + 1], bz + m[o + 2]).setColor(color).setUv(m[o + 3], m[o + 4])
-                            .setOverlay(OverlayTexture.NO_OVERLAY).setLight(h.light()).setNormal(p, nx, ny, nz);
+                            .setOverlay(OverlayTexture.NO_OVERLAY).setLight(light).setNormal(p, nx, ny, nz);
                 }
             }
             k = base + n * 5;
@@ -959,14 +1091,17 @@ public final class Tracers {
             BlockState st = lvl.getBlockState(h.block());
             if (st == h.state()) return false;
             if (st.getBlock() != h.state().getBlock()) return true;
+            // on a moving part: it goes with the part, not with the block's shape (a door's open state)
+            if (h.follow() != null) return false;
             return net.minecraft.world.phys.shapes.Shapes.joinIsNotEmpty(st.getShape(lvl, h.block()), h.state().getShape(lvl, h.block()),
                     net.minecraft.world.phys.shapes.BooleanOp.NOT_SAME);
         });
         // holes on what a renderer draws (a door's leaf): gone when it is no longer drawn there (the door opened)
         if (lvl != null && now - drawnChecked > 300_000_000L) {
             drawnChecked = now;
-            HOLES.removeIf(h -> h.drawn() && !stillDrawn(lvl, h));
+            HOLES.removeIf(h -> h.drawn() && h.follow() == null && !stillDrawn(lvl, h));
         }
+        if (lvl != null) follow(lvl, now);
         if (HOLES.isEmpty() || !Config.bulletHoles) return;
         for (int group = 0; group < 4 * (SCORCH + 1); group++) {
             int kind = group % (SCORCH + 1);
