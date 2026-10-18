@@ -50,11 +50,15 @@ public final class BulletFx {
         // a block drawn by its renderer (NTM's machines) has no texture for crumbs (the purple and black "missing"
         // squares) or an odd one (its item's icon): crumbs of the colours its model has where the bullet hit
         boolean byRenderer = noParticleTexture(state) || state.getRenderShape() != net.minecraft.world.level.block.RenderShape.MODEL;
+        if (HIT_NOTED.merge(state.getBlock(), 1, Integer::sum) <= 3)
+            GunFeel.LOGGER.info("Bullet hit effects on {}: render shape {}, particle texture {}, {} particle kinds, sound {}",
+                    net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(state.getBlock()), state.getRenderShape(),
+                    noParticleTexture(state) ? "missing" : "ok", fx.particles().size(), fx.sound() == null ? "none" : fx.sound().id());
         for (BulletRules.Particle part : fx.particles()) {
             if (part.id().equalsIgnoreCase("block") && byRenderer) {
                 if (!looked) {
                     looked = true;
-                    drawn = Crumbs.at(level, at, dir);
+                    drawn = Crumbs.at(level, hit.getBlockPos(), at, dir);
                 }
                 if (drawn == null && !noParticleTexture(state)) {
                     // no drawn model there: the block's own crumbs after all
@@ -89,6 +93,7 @@ public final class BulletFx {
         level.playLocalSound(at.x, at.y, at.z, e, SoundSource.PLAYERS, s.volume(), s.pitch() * (0.9F + r.nextFloat() * 0.2F), false);
     }
 
+    private static final java.util.Map<net.minecraft.world.level.block.Block, Integer> HIT_NOTED = new java.util.HashMap<>();
     private static final java.util.Map<BlockState, Boolean> NO_TEXTURE = new java.util.IdentityHashMap<>();
 
     private static boolean noParticleTexture(BlockState state) {
@@ -106,8 +111,34 @@ public final class BulletFx {
     private record Crumbs(RenderedMesh.Tri tri, float u, float v, double du, double dv) {
         // the bullet's line through the hit (the hit is on the block's cells or hitbox, up to a cell off the model):
         // the first shown pixel it meets near there; else the triangle closest to the point
-        static @Nullable Crumbs at(ClientLevel level, Vec3 at, Vec3 dir) {
-            List<RenderedMesh.Tri> near = RenderedMesh.within(level, new net.minecraft.world.phys.AABB(at, at).inflate(0.35));
+        static @Nullable Crumbs at(ClientLevel level, net.minecraft.core.BlockPos pos, Vec3 at, Vec3 dir) {
+            var box = new net.minecraft.world.phys.AABB(at, at).inflate(0.35);
+            List<RenderedMesh.Tri> near = new java.util.ArrayList<>(RenderedMesh.within(level, box));
+            int drawnBy = near.size();
+            near.addAll(RenderedMesh.models(level, box, pos, new net.minecraft.world.phys.AABB(pos), new boolean[1],
+                    java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>())));
+            Crumbs got = find(near, at, dir);
+            note(level, pos, drawnBy, near.size() - drawnBy, got);
+            return got;
+        }
+
+        private static final java.util.Map<net.minecraft.world.level.block.Block, Integer> NOTED = new java.util.HashMap<>();
+
+        // the first few hits on each kind of block: what the crumbs were made from, to the log
+        private static void note(ClientLevel level, net.minecraft.core.BlockPos pos, int drawnBy, int models, @Nullable Crumbs got) {
+            var block = level.getBlockState(pos).getBlock();
+            int n = NOTED.merge(block, 1, Integer::sum);
+            if (n > 3) return;
+            String what = "none";
+            if (got != null) {
+                int c = got.tri().tex().color(got.u(), got.v());
+                what = String.format(java.util.Locale.ROOT, "%s colour #%08x", RenderedMesh.texName(got.tri().tex()), c);
+            }
+            GunFeel.LOGGER.info("Bullet crumbs on {}: {} renderer triangles, {} model triangles near; crumbs from {}",
+                    net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(block), drawnBy, models, what);
+        }
+
+        private static @Nullable Crumbs find(List<RenderedMesh.Tri> near, Vec3 at, Vec3 dir) {
             if (near.isEmpty()) return null;
             Vec3 nd = dir.normalize();
             org.joml.Vector3d o = new org.joml.Vector3d(at.x - nd.x * 0.3, at.y - nd.y * 0.3, at.z - nd.z * 0.3), dv = new org.joml.Vector3d(nd.x, nd.y, nd.z);
