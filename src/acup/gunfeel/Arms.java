@@ -506,9 +506,27 @@ public final class Arms {
                     m = new Matrix4f().translate(at).rotate(ang, axis).translate(new Vector3f(at).negate()).mul(m);
                 }
                 int crop = lastCrop;
-                // armCarryBlend (per gun): from the hand's usual hold (sliding along a lifted gun) into carrying, so
-                // the first frame of carrying does not jump to the bare grip point
-                if (Config.armCarryBlend && carried[0] < 1F) {
+                if (Config.armCarryKeepAngle) {
+                    // armCarryKeepAngle (per gun): the arm keeps its hold on the gun (angle, length) and only moves,
+                    // the hand from the grip to beside the carried thing (Sexy's bottle)
+                    Matrix4f hold = HAVE_FOLLOW[i] ? new Matrix4f(cameraInv).mul(FOLLOW[i]) : bodyInCamera;
+                    Vector3f hg = hold.transformPosition(grip[i][0], grip[i][1], grip[i][2], new Vector3f());
+                    Vector3f hc = hold.transformPosition(grip[i + 2][0], grip[i + 2][1], grip[i + 2][2], new Vector3f());
+                    Quaternionf hown = new Quaternionf().slerp(twist, right ? followRight : followLeft).normalize();
+                    if (!Float.isFinite(hown.x + hown.y + hown.z + hown.w)) hown.identity();
+                    Matrix4f usual = pose(right, slim, hg, HAVE_FOLLOW[i] ? null : profiles(item)[i], geometry.fraction(grip[i][2]), bodyInCamera,
+                            down, hc, !right && !inspect, hown, 0F, r);
+                    float k = 2F / 16F * r.s;
+                    Vector3f from = new Vector3f(down).mul(k).add(hg);
+                    Vector3f to = new Vector3f(side).mul(k).add(at);
+                    float e = carried[0] * carried[0] * (3F - 2F * carried[0]);
+                    Vector3f move = to.sub(from).mul(e);
+                    m = new Matrix4f().translation(move).mul(usual);
+                    crop = lastCrop;
+                } else if (Config.armCarryBlend && carried[0] < 1F) {
+                    // armCarryBlend (per gun): from the hand's usual hold (sliding along a lifted gun) into carrying, so
+                    // the first frame of carrying does not jump to the bare grip point
+
                     Matrix4f hold = HAVE_FOLLOW[i] ? new Matrix4f(cameraInv).mul(FOLLOW[i]) : bodyInCamera;
                     Vector3f hg = hold.transformPosition(grip[i][0], grip[i][1], grip[i][2], new Vector3f());
                     Vector3f hc = hold.transformPosition(grip[i + 2][0], grip[i + 2][1], grip[i + 2][2], new Vector3f());
@@ -520,7 +538,7 @@ public final class Arms {
                     m = blend(usual, m, w);
                     if (w < 0.5F) crop = lastCrop;
                 }
-                branch = "carry w=" + fmt(carried[0]) + " at=" + fmt(at) + (Config.armCarryBlend ? " blend" : "");
+                branch = "carry w=" + fmt(carried[0]) + " at=" + fmt(at) + (Config.armCarryKeepAngle ? " keep" : Config.armCarryBlend ? " blend" : "");
                 submit(collector, light, arm, skin, new Matrix4f(CAMERA).mul(m), crop, right, slim, sleeveShown, sleeve);
                 continue;
             }
