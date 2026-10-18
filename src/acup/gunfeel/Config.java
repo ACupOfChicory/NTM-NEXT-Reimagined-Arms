@@ -179,8 +179,8 @@ public final class Config {
               (moved by the animation), held from side dx,dy,dz (default 0,0,-1, length as in armLeftCarry);
               <part>#last / <part>#n = the last / n-th (from 0) time that part is drawn this frame (a belt drawn link by link).
               Between two keys the hand moves smoothly from one target to the other; used instead of armLeftCarry.
-              ...[/dx,dy,dz]>sx,sy,sz moves the shoulder end of the arm by sx,sy,sz in view space (x right, y up, z back):
-              turns the arm (Sexy's box: "<" the lower arm to the left so it misses the gun)
+              ...[/dx,dy,dz]>sx,sy,sz moves the shoulder end of the arm by sx,sy,sz in view space (y up, z back; x on the left arm: + = left):
+              turns the arm (Sexy's box: the shoulder end to the left, ">0.65,0,0", so the arm misses the gun)
             armPathMinLength: an arm on its path (armLeftPath) shows at least this many arm pixels (0 = cut wherever
               the reach plane cuts it; a hand right in front of the eye then shows only a pixel or two)
             armPathTimes: named times for armLeftPath / armRightPath, "release=2350,grab=1400": a key's ms may then be
