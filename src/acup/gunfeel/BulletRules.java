@@ -1,0 +1,332 @@
+package acup.gunfeel;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.regex.Pattern;
+
+import org.jspecify.annotations.Nullable;
+
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.tags.TagKey;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.block.SoundType;
+import net.minecraft.world.level.block.state.BlockState;
+import net.neoforged.fml.loading.FMLPaths;
+
+// What bullets do to the blocks and creatures they hit, besides NTM's damage: break blocks, particles, sounds.
+// Rules come from ntmgunfeel-bullets.txt in the mod jar, then config/ntm-gunfeel-bullets.txt (its lines win: of the
+// rules that match, the last one counts). The server uses break, entity and kill lines; the client hit, whizz and fly.
+public final class BulletRules {
+    private BulletRules() {
+    }
+
+    public static final String FILE = "ntm-gunfeel-bullets.txt";
+
+    // break: how a block gives way. mode: 0 never, 1 instant, 2 after `amount` hits, 3 after `amount` x hardness damage
+    public record Break(int mode, float amount, boolean drop, boolean pass, @Nullable String replace) {
+    }
+
+    // a particle: "block" (the hit block's crack), "block:<id>" (that block's crack) or a plain particle id
+    public record Particle(String id, int count) {
+    }
+
+    // a sound: "block" (the hit block's own hit sound) or a sound id
+    public record Sound(String id, float volume, float pitch) {
+    }
+
+    public record Effect(List<Particle> particles, @Nullable Sound sound, boolean toAll) {
+        public boolean empty() {
+            return particles.isEmpty() && sound == null;
+        }
+    }
+
+    public record Whizz(@Nullable Sound sound, float radius) {
+    }
+
+    private record Rule(String kind, List<String> selectors, Map<String, String> opts, String[] words) {
+    }
+
+    private static final Effect NO_EFFECT = new Effect(List.of(), null, false);
+    private static List<Rule> rules = List.of();
+    private static long stamp = Long.MIN_VALUE, lastPoll;
+    private static boolean builtinRead;
+    private static List<Rule> builtin = List.of();
+    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger("ntm-gunfeel");
+    private static final Map<BlockState, java.util.Optional<Break>> BREAKS = new java.util.IdentityHashMap<>();
+    private static final Map<BlockState, Effect> HITS = new java.util.IdentityHashMap<>();
+
+    private static synchronized List<Rule> rules() {
+        long now = System.currentTimeMillis();
+        if (!builtinRead) {
+            builtinRead = true;
+            try (var in = BulletRules.class.getResourceAsStream("/ntmgunfeel-bullets.txt")) {
+                if (in != null) builtin = parse(new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8)).lines().toList());
+            } catch (Exception e) {
+                LOGGER.warn("Could not read the built-in bullet rules", e);
+            }
+            stamp = Long.MIN_VALUE + 1;
+            lastPoll = 0;
+        }
+        if (now - lastPoll > 1000L) {
+            lastPoll = now;
+            Path f = FMLPaths.CONFIGDIR.get().resolve(FILE);
+            try {
+                if (!Files.exists(f)) Files.writeString(f, HELP);
+                long m = Files.getLastModifiedTime(f).toMillis();
+                if (m != stamp) {
+                    stamp = m;
+                    List<Rule> all = new ArrayList<>(builtin);
+                    all.addAll(parse(Files.readAllLines(f, StandardCharsets.UTF_8)));
+                    rules = all;
+                    BREAKS.clear();
+                    HITS.clear();
+                }
+            } catch (Exception e) {
+                if (rules.isEmpty()) rules = builtin;
+            }
+        }
+        return rules;
+    }
+
+    private static List<Rule> parse(List<String> lines) {
+        List<Rule> out = new ArrayList<>();
+        for (String raw : lines) {
+            String line = raw.strip();
+            int hash = line.indexOf(" #");
+            if (hash >= 0) line = line.substring(0, hash).strip();
+            if (line.isEmpty() || line.startsWith("#")) continue;
+            String[] w = line.split("\\s+");
+            String kind = w[0].toLowerCase(Locale.ROOT);
+            List<String> sel = new ArrayList<>();
+            Map<String, String> opts = new HashMap<>();
+            List<String> words = new ArrayList<>();
+            int i = 1;
+            // whizz and fly take no selectors
+            if (!kind.equals("whizz") && !kind.equals("fly") && w.length > 1) {
+                for (String s : w[1].split(",")) if (!s.isEmpty()) sel.add(s);
+                i = 2;
+            }
+            for (; i < w.length; i++) {
+                int eq = w[i].indexOf('=');
+                if (eq > 0) opts.put(w[i].substring(0, eq).toLowerCase(Locale.ROOT), w[i].substring(eq + 1));
+                else words.add(w[i].toLowerCase(Locale.ROOT));
+            }
+            out.add(new Rule(kind, sel, opts, words.toArray(String[]::new)));
+        }
+        return out;
+    }
+
+    // ---- matching
+
+    private static final Map<String, SoundType> SOUND_TYPES = soundTypes();
+
+    private static Map<String, SoundType> soundTypes() {
+        Map<String, SoundType> out = new HashMap<>();
+        for (Field f : SoundType.class.getFields()) {
+            if (!Modifier.isStatic(f.getModifiers()) || f.getType() != SoundType.class) continue;
+            try {
+                out.put(f.getName().toLowerCase(Locale.ROOT), (SoundType) f.get(null));
+            } catch (IllegalAccessException e) {
+                // skip
+            }
+        }
+        return out;
+    }
+
+    private static final Map<String, Pattern> PATTERNS = new HashMap<>();
+
+    private static boolean idMatches(String sel, Identifier id) {
+        if (sel.startsWith("~")) {
+            Pattern p = PATTERNS.computeIfAbsent(sel, s -> {
+                try {
+                    return Pattern.compile(s.substring(1));
+                } catch (RuntimeException e) {
+                    return Pattern.compile("(?!)");
+                }
+            });
+            return p.matcher(id.toString()).matches();
+        }
+        Identifier want = Identifier.tryParse(sel);
+        return want != null && want.equals(id);
+    }
+
+    static boolean blockMatches(List<String> sel, BlockState state) {
+        Identifier id = BuiltInRegistries.BLOCK.getKey(state.getBlock());
+        for (String s : sel) {
+            if (s.equals("*")) return true;
+            if (s.startsWith("#")) {
+                Identifier t = Identifier.tryParse(s.substring(1));
+                if (t != null && state.is(TagKey.create(Registries.BLOCK, t))) return true;
+            } else if (s.startsWith("@")) {
+                SoundType st = SOUND_TYPES.get(s.substring(1).toLowerCase(Locale.ROOT));
+                if (st != null && state.getSoundType() == st) return true;
+            } else if (idMatches(s, id)) return true;
+        }
+        return false;
+    }
+
+    static boolean entityMatches(List<String> sel, Entity e) {
+        Identifier id = BuiltInRegistries.ENTITY_TYPE.getKey(e.getType());
+        for (String s : sel) {
+            if (s.equals("*")) return true;
+            if (s.startsWith("#")) {
+                Identifier t = Identifier.tryParse(s.substring(1));
+                if (t != null && e.is(TagKey.create(Registries.ENTITY_TYPE, t))) return true;
+            } else if (idMatches(s, id)) return true;
+        }
+        return false;
+    }
+
+    private static @Nullable Rule last(String kind, java.util.function.Predicate<Rule> match) {
+        List<Rule> all = rules();
+        for (int i = all.size() - 1; i >= 0; i--) {
+            Rule r = all.get(i);
+            if (r.kind().equals(kind) && match.test(r)) return r;
+        }
+        return null;
+    }
+
+    // ---- answers
+
+    public static synchronized @Nullable Break breakRule(BlockState state) {
+        rules();
+        java.util.Optional<Break> known = BREAKS.get(state);
+        if (known != null) return known.orElse(null);
+        Rule r = last("break", x -> blockMatches(x.selectors(), state));
+        Break out = null;
+        if (r != null && r.words().length > 0) {
+            String[] w = r.words();
+            int mode = switch (w[0]) {
+                case "instant" -> 1;
+                case "hits" -> 2;
+                case "damage" -> 3;
+                default -> 0;
+            };
+            float amount = 1F;
+            if ((mode == 2 || mode == 3) && w.length > 1) {
+                try {
+                    amount = Float.parseFloat(w[1]);
+                } catch (NumberFormatException e) {
+                    // keep 1
+                }
+            }
+            boolean drop = false, pass = false;
+            for (String s : w) {
+                if (s.equals("drop")) drop = true;
+                if (s.equals("pass")) pass = true;
+            }
+            out = mode == 0 ? null : new Break(mode, amount, drop, pass, r.opts().get("replace"));
+        }
+        BREAKS.put(state, java.util.Optional.ofNullable(out));
+        return out;
+    }
+
+    public static synchronized Effect hit(BlockState state) {
+        rules();
+        Effect got = HITS.get(state);
+        if (got != null) return got;
+        Rule r = last("hit", x -> blockMatches(x.selectors(), state));
+        Effect out = r == null ? NO_EFFECT : effect(r);
+        HITS.put(state, out);
+        return out;
+    }
+
+    public static synchronized Effect entity(String kind, Entity e) {
+        Rule r = last(kind, x -> entityMatches(x.selectors(), e));
+        return r == null ? NO_EFFECT : effect(r);
+    }
+
+    public static synchronized Whizz whizz() {
+        Rule r = last("whizz", x -> true);
+        if (r == null) return new Whizz(null, 0F);
+        return new Whizz(sound(r.opts().get("sound")), num(r.opts().get("radius"), 3F));
+    }
+
+    public static synchronized @Nullable Sound fly() {
+        Rule r = last("fly", x -> true);
+        return r == null ? null : sound(r.opts().get("sound"));
+    }
+
+    private static Effect effect(Rule r) {
+        List<Particle> ps = new ArrayList<>();
+        String p = r.opts().get("particles");
+        if (p != null && !p.equalsIgnoreCase("none")) {
+            for (String s : p.split(",")) {
+                if (s.isEmpty()) continue;
+                int star = s.lastIndexOf('*');
+                int count = 1;
+                String id = s;
+                if (star > 0) {
+                    try {
+                        count = Math.max(1, Integer.parseInt(s.substring(star + 1)));
+                    } catch (NumberFormatException e) {
+                        // 1
+                    }
+                    id = s.substring(0, star);
+                }
+                ps.add(new Particle(id, count));
+            }
+        }
+        return new Effect(List.copyOf(ps), sound(r.opts().get("sound")), "all".equalsIgnoreCase(r.opts().get("to")));
+    }
+
+    // "id[/volume[/pitch]]", "none" = no sound
+    private static @Nullable Sound sound(@Nullable String s) {
+        if (s == null || s.isEmpty() || s.equalsIgnoreCase("none")) return null;
+        String[] p = s.split("/");
+        return new Sound(p[0], p.length > 1 ? num(p[1], 1F) : 1F, p.length > 2 ? num(p[2], 1F) : 1F);
+    }
+
+    private static float num(@Nullable String s, float def) {
+        if (s == null) return def;
+        try {
+            return Float.parseFloat(s);
+        } catch (NumberFormatException e) {
+            return def;
+        }
+    }
+
+    private static final String HELP = """
+            # NTM-NEXT Reimagined Arms: what bullets do to blocks and creatures. One rule per line; these lines come
+            # after the mod's own (ntmgunfeel-bullets.txt in the jar) and win over them: of the rules that match, the
+            # last one counts. Changes apply within a second, no restart.
+            #
+            # Who: a block id (minecraft:ice), a tag (#minecraft:leaves), a pattern (~minecraft:.*_glass), a block
+            # sound type (@metal, @wood, @glass, @stone, @grass ...), * = any; several with commas, no spaces.
+            # For entity/kill lines: an entity id, #tag, ~pattern or *.
+            #
+            # break <blocks> never | instant | hits <n> | damage <x> [drop] [pass] [replace=<block state>]
+            #   damage <x>: breaks once the bullets' damage on it adds up to x times its hardness; hits and damage
+            #   show the cracks and are forgotten 20 s after the last hit. drop = drops itself; pass = the bullet
+            #   flies on through the broken block. A player's bullet breaks only where that player could break
+            #   blocks (claims, spawn protection).
+            # hit <blocks> [particles=<p>*<n>,...] [sound=<id>[/volume[/pitch]]]   (each player's own game)
+            #   particle: block (the hit block's crumbs), block:<id> (that block's crumbs), a particle id
+            #   (minecraft:smoke); sound: block (the hit block's own hit sound), a sound id; none = nothing
+            # entity <who> [particles=...] [sound=...] [to=all]   a bullet hits a creature (sound heard by the shooter,
+            #   to=all: by everyone near)
+            # kill <who> [particles=...] [sound=...] [to=all]     a bullet kills it
+            # whizz sound=<id>[/volume[/pitch]] radius=<blocks>  someone else's bullet flies past your head
+            # fly sound=<id>[/volume[/pitch]]                    a sound that flies with every bullet
+            #
+            # Examples:
+            # break minecraft:melon,minecraft:pumpkin damage 2 drop
+            # break #minecraft:leaves never
+            # hit @metal particles=block*4,minecraft:crit*3 sound=hbm:metal_impact/0.6
+            # entity * particles=block:minecraft:redstone_block*6
+            # kill minecraft:zombie sound=minecraft:entity.experience_orb.pickup/0.5/0.6
+            # whizz sound=none
+            """;
+}

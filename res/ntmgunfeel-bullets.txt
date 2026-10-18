@@ -1,0 +1,7 @@
+# NTM-NEXT Reimagined Arms: the mod's own bullet rules (syntax: config/ntm-gunfeel-bullets.txt, whose lines win)
+break minecraft:pointed_dripstone,minecraft:flower_pot,minecraft:decorated_pot instant drop
+break #minecraft:leaves hits 3 pass
+break minecraft:melon,minecraft:pumpkin,minecraft:carved_pumpkin,minecraft:jack_o_lantern hits 4 drop
+hit * particles=block*6,minecraft:smoke*1 sound=block/0.6
+hit @metal particles=block*4,minecraft:crit*2 sound=hbm:metal_impact/0.5
+whizz sound=ntmgunfeel:bullet.whizz/0.9 radius=3

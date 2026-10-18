@@ -45,7 +45,7 @@ public final class ElevatorMesh {
             platform = pl;
             return true;
         } catch (Exception e) {
-            GunFeel.LOGGER.warn("Could not read the cargo elevator mesh: its platform stops bullets whole", e);
+            org.slf4j.LoggerFactory.getLogger("ntm-gunfeel").warn("Could not read the cargo elevator mesh: its platform stops bullets whole", e);
             platform = null;
             return false;
         }

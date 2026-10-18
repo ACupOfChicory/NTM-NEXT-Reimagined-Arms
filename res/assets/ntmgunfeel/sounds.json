@@ -1,0 +1,30 @@
+{
+  "bullet.whizz": {
+    "sounds": [
+      {
+        "name": "ntmgunfeel:bullet/whizz1",
+        "attenuation_distance": 8
+      },
+      {
+        "name": "ntmgunfeel:bullet/whizz2",
+        "attenuation_distance": 8
+      },
+      {
+        "name": "ntmgunfeel:bullet/whizz3",
+        "attenuation_distance": 8
+      },
+      {
+        "name": "ntmgunfeel:bullet/whizz4",
+        "attenuation_distance": 8
+      },
+      {
+        "name": "ntmgunfeel:bullet/whizz5",
+        "attenuation_distance": 8
+      },
+      {
+        "name": "ntmgunfeel:bullet/whizz6",
+        "attenuation_distance": 8
+      }
+    ]
+  }
+}

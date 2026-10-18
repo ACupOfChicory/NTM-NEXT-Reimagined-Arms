@@ -50,6 +50,37 @@ public abstract class MixinBulletServer {
             self.level().destroyBlock(hit.getBlockPos(), false);
     }
 
+    // bullet rules (ntm-gunfeel-bullets.txt): a plain bullet breaks the block it hits when a "break" rule says so, then
+    // stops there or, with "pass", flies on; an explosive bullet breaks it and still goes off as NTM has it
+    @Inject(method = "onImpact", at = @At("HEAD"), cancellable = true)
+    private void gunfeel$breakBlock(net.minecraft.world.phys.HitResult mop, CallbackInfo ci) {
+        EntityBulletBaseMK4 self = (EntityBulletBaseMK4) (Object) this;
+        if (config == null || self.level().isClientSide() || !(mop instanceof net.minecraft.world.phys.BlockHitResult hit)
+                || hit.getType() != net.minecraft.world.phys.HitResult.Type.BLOCK) return;
+        int got = acup.gunfeel.BulletServer.blockHit(self, hit);
+        if (got == 0 || config.onImpact != null) return;
+        Vec3 at = hit.getLocation();
+        self.setPos(at.x, at.y, at.z);
+        if (got == 1) self.discard();
+        ci.cancel();
+    }
+
+    @Unique
+    private boolean gunfeel$targetAlive;
+
+    @Inject(method = "onImpact", at = @At("HEAD"))
+    private void gunfeel$entityBefore(net.minecraft.world.phys.HitResult mop, CallbackInfo ci) {
+        gunfeel$targetAlive = mop instanceof net.minecraft.world.phys.EntityHitResult e && e.getEntity().isAlive();
+    }
+
+    // bullet rules: "entity" and "kill" effects of the creature the bullet hit
+    @Inject(method = "onImpact", at = @At("RETURN"))
+    private void gunfeel$entityAfter(net.minecraft.world.phys.HitResult mop, CallbackInfo ci) {
+        EntityBulletBaseMK4 self = (EntityBulletBaseMK4) (Object) this;
+        if (self.level().isClientSide() || !(mop instanceof net.minecraft.world.phys.EntityHitResult e)) return;
+        acup.gunfeel.BulletServer.entityHit(self, e.getEntity(), e.getLocation(), gunfeel$targetAlive);
+    }
+
     @Inject(method = "tick", at = @At("HEAD"))
     private void gunfeel$announce(CallbackInfo ci) {
         EntityBulletBaseMK4 self = (EntityBulletBaseMK4) (Object) this;

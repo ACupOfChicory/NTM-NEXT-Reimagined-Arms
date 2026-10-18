@@ -81,6 +81,7 @@ public final class Config {
     public static float armPathMinLength = 0F;
     public static String armPathTimes = "";
     public static boolean instantSwitch = true;
+    public static boolean bulletFx = true;
     // arm thickness before armScale, the same on every gun (Maresleg / Old Classic); 0 = grows with the arm's length
     public static float armBaseRight = 1.70F;
     public static float armBaseLeft = 3.02F;
@@ -187,6 +188,8 @@ public final class Config {
               a name or name+ms / name-ms ("release:Magazine@... release+300:Gun@..."), so a moment is set in one place
             instantSwitch: switching to or from an NTM gun shows the new slot at once: the old gun is not drawn up
               until the next tick, and the new gun starts its draw animation without waiting for the server
+            bulletFx: particles and sounds of bullets (block hits, a bullet whizzing past, the in-flight sound) by the
+              rules in config/ntm-gunfeel-bullets.txt
             Every value except enabled can be overridden per gun in config/ntm-gunfeel-guns.properties
             (hbm\\:gun_maresleg.armRollLeft = -55) or with /gunfeel set <key> <value> for the held gun.
             Hand positions per gun: <gun>.right / <gun>.left there, or /gunfeel grip""";
@@ -326,6 +329,7 @@ public final class Config {
         armPathMinLength = num(p, "armPathMinLength", armPathMinLength);
         armPathTimes = p.getProperty("armPathTimes", armPathTimes).trim();
         instantSwitch = bool(p, "instantSwitch", instantSwitch);
+        bulletFx = bool(p, "bulletFx", bulletFx);
         armBaseRight = num(p, "armBaseRight", armBaseRight);
         armBaseLeft = num(p, "armBaseLeft", armBaseLeft);
         armLoadScaleRight = num(p, "armLoadScaleRight", armLoadScaleRight);
@@ -420,6 +424,7 @@ public final class Config {
         p.setProperty("armPathMinLength", Float.toString(armPathMinLength));
         p.setProperty("armPathTimes", armPathTimes);
         p.setProperty("instantSwitch", Boolean.toString(instantSwitch));
+        p.setProperty("bulletFx", Boolean.toString(bulletFx));
         p.setProperty("armBaseRight", Float.toString(armBaseRight));
         p.setProperty("armBaseLeft", Float.toString(armBaseLeft));
         p.setProperty("armLoadScaleRight", Float.toString(armLoadScaleRight));

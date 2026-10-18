@@ -72,6 +72,8 @@ public final class Tracers {
         double checked; // ticks of path already tested against the world
         Vec3 eye; // the shooter's eyes when the bullet starts near them: its first test starts there
         double end = Double.NaN; // ticks at which it hit something
+        boolean whizzed; // already whizzed past the player
+        volatile boolean gone; // no longer flown (its in-flight sound stops)
 
         Shot(ShotPayload p, BulletConfig config, int[] colors) {
             this.config = config;
@@ -327,7 +329,7 @@ public final class Tracers {
 
     public static void handle(ShotPayload p, IPayloadContext context) {
         serverAnnounces = true;
-        if (!Config.tracers && !Config.bulletHoles) return;
+        if (!Config.tracers && !Config.bulletHoles && !Config.bulletFx) return;
         if (p.config() < 0 || p.config() >= BulletConfig.configs.size()) return;
         BulletConfig config = BulletConfig.configs.get(p.config());
         if (config.velocity < 5F) return;
@@ -354,10 +356,13 @@ public final class Tracers {
         Entity shooter = mc.level == null || p.owner() < 0 ? null : mc.level.getEntity(p.owner());
         if (shooter != null && shooter.getEyePosition().distanceToSqr(s.start) < 9.0) s.eye = shooter.getEyePosition();
         SHOTS.add(s);
-        if (SHOTS.size() > 512) SHOTS.remove(0);
+        if (SHOTS.size() > 512) SHOTS.remove(0).gone = true;
+        BulletFx.fly(() -> s.at(Math.min((System.nanoTime() - s.born) / 50_000_000.0, Double.isNaN(s.end) ? s.lifeTicks : s.end)),
+                () -> !s.gone && Double.isNaN(s.end) && (System.nanoTime() - s.born) / 50_000_000.0 < s.lifeTicks);
     }
 
     public static void clear() {
+        for (Shot s : SHOTS) s.gone = true;
         SHOTS.clear();
         HOLES.clear();
         RenderedMesh.clear();
@@ -386,6 +391,7 @@ public final class Tracers {
             double head = Double.isNaN(s.end) ? Math.min(t, s.lifeTicks) : Math.min(t, s.end);
             double tail = Math.max(0.0, t - Math.max(Config.tracerLength / s.speed, frameTicks * 1.5));
             if (tail >= head) {
+                s.gone = true;
                 it.remove();
                 continue;
             }
@@ -424,12 +430,17 @@ public final class Tracers {
                 }
             }
         }
+        Vec3 stop = rb;
         if (!Double.isNaN(hitEntity)) {
             s.end = s.checked + (t - s.checked) * hitEntity / len;
+            stop = ra.add(dir.scale(hitEntity / len));
         } else if (block.getType() != HitResult.Type.MISS) {
             s.end = s.checked + (t - s.checked) * (len > 1e-6 ? reach / len : 0.0);
+            stop = block.getLocation();
             if (Config.bulletHoles && len > 1e-6) addHole(level, block, s.config, dir.scale(1.0 / len));
+            if (len > 1e-6) BulletFx.blockHit(level, block, dir.scale(1.0 / len));
         }
+        if (!s.whizzed) s.whizzed = BulletFx.whizz(level, s.owner, ra, stop);
         s.checked = t;
     }
 

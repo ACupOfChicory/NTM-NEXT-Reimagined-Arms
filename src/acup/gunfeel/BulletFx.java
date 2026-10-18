@@ -1,0 +1,129 @@
+package acup.gunfeel;
+
+import java.util.function.BooleanSupplier;
+import java.util.function.Supplier;
+
+import org.jspecify.annotations.Nullable;
+
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.resources.sounds.AbstractTickableSoundInstance;
+import net.minecraft.core.Direction;
+import net.minecraft.core.particles.ParticleOptions;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.Vec3;
+
+// Client side of BulletRules, from the bullets Tracers flies: what a block hit gives off, a bullet whizzing past the
+// player, and the sound a bullet makes in flight.
+public final class BulletFx {
+    private BulletFx() {
+    }
+
+    private static @Nullable SoundEvent event(String id) {
+        Identifier key = Identifier.tryParse(id);
+        if (key == null) return null;
+        return BuiltInRegistries.SOUND_EVENT.getOptional(key).orElseGet(() -> SoundEvent.createVariableRangeEvent(key));
+    }
+
+    public static void blockHit(ClientLevel level, BlockHitResult hit, Vec3 dir) {
+        if (!Config.bulletFx) return;
+        BlockState state = level.getBlockState(hit.getBlockPos());
+        if (state.isAir()) return;
+        BulletRules.Effect fx = BulletRules.hit(state);
+        if (fx.empty()) return;
+        Vec3 at = hit.getLocation();
+        Direction face = hit.getDirection();
+        Vec3 n = new Vec3(face.getStepX(), face.getStepY(), face.getStepZ());
+        // the bullet's direction bounced off the face, so the bits fly back towards the shooter
+        Vec3 out = dir.subtract(n.scale(2 * dir.dot(n))).normalize();
+        RandomSource r = level.getRandom();
+        Vec3 p0 = at.add(n.scale(0.02));
+        for (BulletRules.Particle part : fx.particles()) {
+            ParticleOptions o = BulletServer.particle(part.id(), state);
+            if (o == null) continue;
+            for (int i = 0; i < part.count(); i++) {
+                double sp = 0.05 + r.nextDouble() * 0.15;
+                level.addParticle(o, p0.x, p0.y, p0.z, (out.x + r.nextGaussian() * 0.35) * sp, (out.y + r.nextGaussian() * 0.35) * sp + 0.03,
+                        (out.z + r.nextGaussian() * 0.35) * sp);
+            }
+        }
+        BulletRules.Sound s = fx.sound();
+        if (s == null) return;
+        SoundEvent e = s.id().equalsIgnoreCase("block") ? state.getSoundType().getHitSound() : event(s.id());
+        if (e == null) return;
+        level.playLocalSound(at.x, at.y, at.z, e, SoundSource.PLAYERS, s.volume(), s.pitch() * (0.9F + r.nextFloat() * 0.2F), false);
+    }
+
+    // a stretch a bullet flew this frame, a..b: it whizzes when it passed within the rule's radius of the player's eyes
+    // (not the player's own bullets); true when it did, so it whizzes once
+    public static boolean whizz(ClientLevel level, int owner, Vec3 a, Vec3 b) {
+        if (!Config.bulletFx) return false;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null || owner == mc.player.getId()) return false;
+        BulletRules.Whizz w = BulletRules.whizz();
+        if (w.sound() == null || w.radius() <= 0F) return false;
+        Vec3 eye = mc.player.getEyePosition();
+        Vec3 ab = b.subtract(a);
+        double l2 = ab.lengthSqr();
+        double k = l2 < 1e-9 ? 0.0 : Math.clamp(eye.subtract(a).dot(ab) / l2, 0.0, 1.0);
+        // the nearest point must be along the stretch, not its end: else it is still coming or already gone
+        if (l2 >= 1e-9 && (k <= 0.0 || k >= 1.0)) return false;
+        Vec3 near = a.add(ab.scale(k));
+        double d = near.distanceTo(eye);
+        if (d > w.radius()) return false;
+        SoundEvent e = event(w.sound().id());
+        if (e == null) return false;
+        RandomSource r = level.getRandom();
+        float vol = w.sound().volume() * (float) (1.0 - 0.6 * d / w.radius());
+        level.playLocalSound(near.x, near.y, near.z, e, SoundSource.PLAYERS, vol, w.sound().pitch() * (0.85F + r.nextFloat() * 0.3F), false);
+        return true;
+    }
+
+    // the in-flight sound of one bullet, following it until it stops
+    public static void fly(Supplier<Vec3> where, BooleanSupplier flying) {
+        if (!Config.bulletFx) return;
+        BulletRules.Sound s = BulletRules.fly();
+        if (s == null) return;
+        SoundEvent e = event(s.id());
+        if (e == null) return;
+        Minecraft.getInstance().getSoundManager().play(new Flying(e, s, where, flying));
+    }
+
+    private static final class Flying extends AbstractTickableSoundInstance {
+        private final Supplier<Vec3> where;
+        private final BooleanSupplier flying;
+
+        Flying(SoundEvent e, BulletRules.Sound s, Supplier<Vec3> where, BooleanSupplier flying) {
+            super(e, SoundSource.PLAYERS, RandomSource.create());
+            this.where = where;
+            this.flying = flying;
+            this.looping = true;
+            this.delay = 0;
+            this.volume = s.volume();
+            this.pitch = s.pitch();
+            move();
+        }
+
+        private void move() {
+            Vec3 p = where.get();
+            x = p.x;
+            y = p.y;
+            z = p.z;
+        }
+
+        @Override
+        public void tick() {
+            if (!flying.getAsBoolean()) {
+                stop();
+                return;
+            }
+            move();
+        }
+    }
+}

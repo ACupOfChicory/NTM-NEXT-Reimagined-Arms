@@ -1,0 +1,4 @@
+Bullet whizz sounds, all CC0 1.0 (public domain) from freesound.org, cut, mixed to mono and normalized:
+whizz1  "Whizzby" by Daleonfire               https://freesound.org/people/Daleonfire/sounds/505238/
+whizz2  "Fly-by whiz SFX (subsonic)" by modusmogulus  https://freesound.org/people/modusmogulus/sounds/789222/
+whizz3-6 "Bullet Fly By" by GO_s0unds123      https://freesound.org/people/GO_s0unds123/sounds/730351/
