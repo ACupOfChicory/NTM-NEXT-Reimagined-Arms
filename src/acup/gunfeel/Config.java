@@ -102,6 +102,7 @@ public final class Config {
     public static boolean armCarryBlend = false;
     public static boolean armCarryKeepAngle = false;
     public static boolean armPathBlend = false;
+    public static float armSwitchMs = 0F;
     public static boolean armSlideNearest = false;
     public static String armLeftHide = "", armRightHide = "";
     public static float armAroundTopDrop = 0F;
@@ -155,6 +156,7 @@ public final class Config {
             armCarryTurnRight, armCarryTurnLeft: while a hand carries a shell, turn the arm around that point about the shell's long axis, degrees, + = the shoulder end to the right
             armLeftHide / armRightHide: "RELOAD 0-650; RELOAD_END 0-700" = the hand is not drawn in these ms of an animation (Henry: while the gun is down)
             armSlideNearest: a hand sliding along the gun (armSlide) stops at the reachable point nearest its grip, stepping along the gun (Henry)
+            armSwitchMs: when an animation starts or ends the arm goes from where it was over this many ms (NTM shows an animation ~50 ms in), 0 = off
             armPathBlend: near the grip a hand on its path (armLeftPath/armRightPath) turns smoothly into its usual hold
             armCarryKeepAngle: a carrying hand keeps the arm exactly as it holds the gun and only moves it (Sexy: the bottle)
             armCarryBlend: a hand starting to carry (armLeftCarry / armRightCarry) leaves from its usual hold, blended by the carry weight (Henry: the gun is lifted when the hand leaves)
@@ -358,6 +360,7 @@ public final class Config {
         armCarryBlend = bool(p, "armCarryBlend", armCarryBlend);
         armCarryKeepAngle = bool(p, "armCarryKeepAngle", armCarryKeepAngle);
         armPathBlend = bool(p, "armPathBlend", armPathBlend);
+        armSwitchMs = num(p, "armSwitchMs", armSwitchMs);
         armSlideNearest = bool(p, "armSlideNearest", armSlideNearest);
         armLeftHide = p.getProperty("armLeftHide", armLeftHide).trim();
         armRightHide = p.getProperty("armRightHide", armRightHide).trim();
@@ -461,6 +464,7 @@ public final class Config {
         p.setProperty("armCarryBlend", Boolean.toString(armCarryBlend));
         p.setProperty("armCarryKeepAngle", Boolean.toString(armCarryKeepAngle));
         p.setProperty("armPathBlend", Boolean.toString(armPathBlend));
+        p.setProperty("armSwitchMs", Float.toString(armSwitchMs));
         p.setProperty("armSlideNearest", Boolean.toString(armSlideNearest));
         p.setProperty("armLeftHide", armLeftHide);
         p.setProperty("armRightHide", armRightHide);

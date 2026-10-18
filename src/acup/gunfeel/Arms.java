@@ -1218,6 +1218,13 @@ public final class Arms {
         return new Matrix4f().translation(t).rotate(q).scale(sc);
     }
 
+    // armSwitchMs state per hand (0 = right, 1 = left): the animation drawn last, the arm drawn last, and the
+    // pose a new animation starts from
+    private static final String[] switchKey = new String[2];
+    private static final Matrix4f[] switchLast = new Matrix4f[2], switchFrom = new Matrix4f[2];
+    private static final int[] switchLastCrop = new int[2], switchFromCrop = new int[2];
+    private static final long[] switchAt = new long[2];
+
     // pixels of arm shown by the last blendAtHand
     private static int blendCrop = 12;
 
@@ -1315,19 +1322,51 @@ public final class Arms {
 
     private static void submit(SubmitNodeCollector collector, int light, ModelPart arm, Identifier skin, Matrix4f m,
             int crop, boolean right, boolean slim, boolean sleeveShown, ModelPart sleeve) {
+        // armSwitchMs (per gun): a new animation (or its end) starts from where the arm was drawn last, over
+        // this many ms. NTM's first frame of an animation comes ~50 ms in, keyed hands jumped there.
+        int hand = right ? 0 : 1;
+        if (Config.armSwitchMs > 0F) {
+            HbmAnimations.Animation anim = HbmAnimations.getRelevantAnim(0);
+            var player = Minecraft.getInstance().player;
+            String item = player == null ? "" : String.valueOf(System.identityHashCode(player.getMainHandItem().getItem()));
+            String key = item + "|" + (anim == null ? "none" : HbmAnimations.getGunAnimation(0) + "@" + anim.startMillis);
+            // another gun: no blend from the last one's arm
+            if (switchKey[hand] != null && !switchKey[hand].startsWith(item + "|")) switchLast[hand] = null;
+            long now = com.hbm.util.GameTime.now();
+            Matrix4f here = new Matrix4f(CAMERA).invert().mul(m);
+            if (switchKey[hand] != null && !key.equals(switchKey[hand]) && switchLast[hand] != null) {
+                switchFrom[hand] = new Matrix4f(switchLast[hand]);
+                switchFromCrop[hand] = switchLastCrop[hand];
+                switchAt[hand] = now;
+            }
+            switchKey[hand] = key;
+            float u = switchFrom[hand] == null ? 1F : (now - switchAt[hand]) / Config.armSwitchMs;
+            if (u < 1F) {
+                u = Math.max(0F, u);
+                float e = u * u * (3F - 2F * u);
+                here = blendAtHand(switchFrom[hand], switchFromCrop[hand], here, crop, e, right, slim);
+                crop = blendCrop;
+                m = new Matrix4f(CAMERA).mul(here);
+            } else {
+                switchFrom[hand] = null;
+            }
+            switchLast[hand] = here;
+            switchLastCrop[hand] = crop;
+        }
+        final int shown = crop;
         if (debugArms) {
             GunAnimation type = HbmAnimations.getGunAnimation(0);
-            Vector3f hand = m.transformPosition(new Vector3f());
+            Vector3f origin = m.transformPosition(new Vector3f());
             Vector3f along = m.transformDirection(new Vector3f(0F, 1F, 0F));
             GunFeel.LOGGER.info("[armdebug] {} {} t={} {} | {} | origin={} up={} crop={}", right ? "R" : "L",
                     HbmAnimations.getRelevantAnim(0) == null ? "-" : type, fmt(animMillis()), branch, right ? "" : branchNote,
-                    fmt(hand), fmt(along), crop);
+                    fmt(origin), fmt(along), shown);
             branchNote = "";
         }
         PoseStack pose = new PoseStack();
         pose.mulPose(m);
-        if (crop < 12) {
-            ModelPart[] cut = CUT.computeIfAbsent((right ? 1000 : 0) + (slim ? 100 : 0) + crop, k -> cutArm(right, slim, crop));
+        if (shown < 12) {
+            ModelPart[] cut = CUT.computeIfAbsent((right ? 1000 : 0) + (slim ? 100 : 0) + shown, k -> cutArm(right, slim, shown));
             arm = cut[0];
             sleeve = cut[1];
         }
