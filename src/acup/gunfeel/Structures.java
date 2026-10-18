@@ -165,8 +165,10 @@ public final class Structures {
         // BlockEntityCargoElevator.shape(): the platform, from the core
         AABB platform = new AABB(-1.0, 0.75 + elevator.extension, -1.0, 2.0, 1.0 + elevator.extension, 2.0)
                 .move(core.getX() - pos.getX(), core.getY() - pos.getY(), core.getZ() - pos.getZ());
+        // not in this block: checked before intersect(), whose new AABB swaps min and max of boxes that miss each
+        // other into a box ending on this block's face
+        if (platform.maxX <= 0 || platform.minX >= 1 || platform.maxY <= 0 || platform.minY >= 1 || platform.maxZ <= 0 || platform.minZ >= 1) return null;
         AABB in = platform.intersect(new AABB(0, 0, 0, 1, 1, 1));
-        if (in.getXsize() <= 0 || in.getYsize() <= 0 || in.getZsize() <= 0) return null;
         return AABB.clip(List.of(in), from, to, pos);
     }
 }
