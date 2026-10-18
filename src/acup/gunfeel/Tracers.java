@@ -456,7 +456,7 @@ public final class Tracers {
             if (len > 1e-6) BulletFx.blockHit(level, block, dir.scale(1.0 / len));
             Perf.add(Perf.FX, px);
         }
-        if (!s.whizzed) s.whizzed = BulletFx.whizz(level, s.owner, ra, stop);
+        if (!s.whizzed) s.whizzed = BulletFx.whizz(level, s.owner, ra, stop, s.speed);
         // blocks it flew through on the way (leaves): their crumbs, no hole
         if (len > 1e-6) {
             double far = stop.distanceToSqr(ra);

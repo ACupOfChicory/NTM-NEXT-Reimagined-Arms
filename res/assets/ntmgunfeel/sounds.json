@@ -24,6 +24,22 @@
       {
         "name": "ntmgunfeel:bullet/whizz6",
         "attenuation_distance": 8
+      },
+      {
+        "name": "ntmgunfeel:bullet/whizz7",
+        "attenuation_distance": 8
+      }
+    ]
+  },
+  "bullet.crack": {
+    "sounds": [
+      {
+        "name": "ntmgunfeel:bullet/crack1",
+        "attenuation_distance": 12
+      },
+      {
+        "name": "ntmgunfeel:bullet/crack2",
+        "attenuation_distance": 12
       }
     ]
   }

@@ -109,7 +109,21 @@ public final class BulletFx {
         if (s == null) return;
         SoundEvent e = s.id().equalsIgnoreCase("block") ? state.getSoundType().getHitSound() : event(s.id());
         if (e == null) return;
-        level.playLocalSound(at.x, at.y, at.z, e, SoundSource.PLAYERS, s.volume(), s.pitch() * (0.9F + r.nextFloat() * 0.2F), false);
+        play(level, at, e, s.volume(), s.pitch() * (0.9F + r.nextFloat() * 0.2F), fx.range());
+    }
+
+    // a sound heard over `range` blocks, fading out to it. Minecraft fades a block's sound out within 16 blocks
+    // (another player's bullet hitting the ground 12 blocks away was all but silent): set nearer the listener on the
+    // same line, so it comes from the same side but fades as if over `range`
+    private static void play(ClientLevel level, Vec3 at, SoundEvent e, float volume, float pitch, float range) {
+        Vec3 p = at;
+        if (range > 16F) {
+            Vec3 ear = Minecraft.getInstance().gameRenderer.mainCamera().position();
+            double d = at.distanceTo(ear);
+            if (d >= range) return;
+            p = ear.add(at.subtract(ear).scale(16.0 / range));
+        }
+        level.playLocalSound(p.x, p.y, p.z, e, SoundSource.PLAYERS, volume, pitch, false);
     }
 
     private static boolean insideCollision(ClientLevel level, Vec3 p) {
@@ -246,7 +260,7 @@ public final class BulletFx {
 
     // a stretch a bullet flew this frame, a..b: it whizzes when it passed within the rule's radius of the player's eyes
     // (not the player's own bullets); true when it did, so it whizzes once
-    public static boolean whizz(ClientLevel level, int owner, Vec3 a, Vec3 b) {
+    public static boolean whizz(ClientLevel level, int owner, Vec3 a, Vec3 b, double speed) {
         if (!Config.bulletFx) return false;
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || owner == mc.player.getId()) return false;
@@ -264,8 +278,20 @@ public final class BulletFx {
         SoundEvent e = event(w.sound().id());
         if (e == null) return false;
         RandomSource r = level.getRandom();
-        float vol = w.sound().volume() * (float) (1.0 - 0.6 * d / w.radius());
-        level.playLocalSound(near.x, near.y, near.z, e, SoundSource.PLAYERS, vol, w.sound().pitch() * (0.85F + r.nextFloat() * 0.3F), false);
+        // closer: louder and a little higher; faster bullets (NTM's usual is 10 blocks a tick) higher too
+        float close = (float) (1.0 - d / w.radius());
+        float vol = w.sound().volume() * (0.4F + 0.6F * close);
+        float fast = (float) Math.clamp(Math.pow(speed / 10.0, 0.25), 0.9, 1.15);
+        float pitch = w.sound().pitch() * fast * (0.9F + 0.15F * close) * (0.88F + r.nextFloat() * 0.24F);
+        level.playLocalSound(near.x, near.y, near.z, e, SoundSource.PLAYERS, vol, pitch, false);
+        // passing right by the head: the snap of the bullet's shock wave on top
+        if (w.crack() != null && d <= w.crackRadius()) {
+            SoundEvent c = event(w.crack().id());
+            if (c != null) {
+                float cv = w.crack().volume() * (float) (0.6 + 0.4 * (1.0 - d / Math.max(0.01, w.crackRadius())));
+                level.playLocalSound(near.x, near.y, near.z, c, SoundSource.PLAYERS, cv, w.crack().pitch() * (0.9F + r.nextFloat() * 0.2F), false);
+            }
+        }
         return true;
     }
 

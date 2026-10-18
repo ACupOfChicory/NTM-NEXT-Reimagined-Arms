@@ -15,7 +15,7 @@ public final class Config {
     public static boolean tracers = true, bulletHoles = true;
     public static float tracerLength = 8F, tracerWidth = 0.02F, holeLife = 30F, holeSize = 0.28F, scorchSize = 0.9F;
     public static int holeMax = 500;
-    public static int holeMaxMachines = 500;
+    public static int holeMaxMachines = 150;
     // blocks whose holes follow only the hitbox, not the texture's see-through pixels ("*" = any letters)
     public static String holeHitboxBlocks = "*glass*";
     // Hip-fire X position of the gun relative to NTM's: 1 = NTM default, 0 = screen centre.

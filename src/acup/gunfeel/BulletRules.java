@@ -46,19 +46,21 @@ public final class BulletRules {
     public record Sound(String id, float volume, float pitch) {
     }
 
-    public record Effect(List<Particle> particles, @Nullable Sound sound, boolean toAll) {
+    // range: blocks the sound is heard over (a block's hit sound alone fades out within 16)
+    public record Effect(List<Particle> particles, @Nullable Sound sound, boolean toAll, float range) {
         public boolean empty() {
             return particles.isEmpty() && sound == null;
         }
     }
 
-    public record Whizz(@Nullable Sound sound, float radius) {
+    // crack: the supersonic snap on top of the whizz when it passes within crackRadius
+    public record Whizz(@Nullable Sound sound, float radius, @Nullable Sound crack, float crackRadius) {
     }
 
     private record Rule(String kind, List<String> selectors, Map<String, String> opts, String[] words) {
     }
 
-    private static final Effect NO_EFFECT = new Effect(List.of(), null, false);
+    private static final Effect NO_EFFECT = new Effect(List.of(), null, false, 16F);
     private static List<Rule> rules = List.of();
     private static long stamp = Long.MIN_VALUE, lastPoll;
     private static boolean builtinRead;
@@ -273,8 +275,9 @@ public final class BulletRules {
 
     public static synchronized Whizz whizz() {
         Rule r = last("whizz", x -> true);
-        if (r == null) return new Whizz(null, 0F);
-        return new Whizz(sound(r.opts().get("sound")), num(r.opts().get("radius"), 3F));
+        if (r == null) return new Whizz(null, 0F, null, 0F);
+        return new Whizz(sound(r.opts().get("sound")), num(r.opts().get("radius"), 3F), sound(r.opts().get("crack")),
+                num(r.opts().get("crackradius"), 1.2F));
     }
 
     public static synchronized @Nullable Sound fly() {
@@ -302,7 +305,8 @@ public final class BulletRules {
                 ps.add(new Particle(id, count));
             }
         }
-        return new Effect(List.copyOf(ps), sound(r.opts().get("sound")), "all".equalsIgnoreCase(r.opts().get("to")));
+        return new Effect(List.copyOf(ps), sound(r.opts().get("sound")), "all".equalsIgnoreCase(r.opts().get("to")),
+                num(r.opts().get("range"), 16F));
     }
 
     // "id[/volume[/pitch]]", "none" = no sound
@@ -336,13 +340,15 @@ public final class BulletRules {
             #   flies on through the broken block; through = bullets always fly through it (no hole, no stop), it still
             #   counts the hits and breaks by its rule ("never through": flown through, never broken). A player's bullet breaks only where that player could break
             #   blocks (claims, spawn protection).
-            # hit <blocks> [particles=<p>*<n>,...] [sound=<id>[/volume[/pitch]]]   (each player's own game)
+            # hit <blocks> [particles=<p>*<n>,...] [sound=<id>[/volume[/pitch]]] [range=<blocks>]   (each player's own game)
             #   particle: block (the hit block's crumbs), block:<id> (that block's crumbs), a particle id
-            #   (minecraft:smoke); sound: block (the hit block's own hit sound), a sound id; none = nothing
+            #   (minecraft:smoke); sound: block (the hit block's own hit sound), a sound id; none = nothing;
+            #   range: heard over that many blocks, fading out to it (Minecraft's own: 16)
             # entity <who> [particles=...] [sound=...] [to=all]   a bullet hits a creature (sound heard by the shooter,
             #   to=all: by everyone near)
             # kill <who> [particles=...] [sound=...] [to=all]     a bullet kills it
-            # whizz sound=<id>[/volume[/pitch]] radius=<blocks>  someone else's bullet flies past your head
+            # whizz sound=<id>[/volume[/pitch]] radius=<blocks> [crack=<id>[/volume[/pitch]] crackradius=<blocks>]
+            #   someone else's bullet flies past your head; crack: the snap of a fast bullet passing very close
             # fly sound=<id>[/volume[/pitch]]                    a sound that flies with every bullet
             #
             # Examples:

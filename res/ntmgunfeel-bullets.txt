@@ -5,6 +5,6 @@ break #minecraft:leaves never through
 # break once the bullets' damage on it adds up to 15 x its hardness (planks 30, doors 45), no drops, then the bullet flies on
 break #minecraft:planks,#minecraft:wooden_slabs,#minecraft:wooden_stairs,#minecraft:wooden_fences,#minecraft:fence_gates,#minecraft:wooden_doors,#minecraft:wooden_trapdoors,#minecraft:wooden_buttons,#minecraft:wooden_pressure_plates,#minecraft:all_signs,minecraft:bamboo_mosaic,minecraft:crafting_table,minecraft:bookshelf,minecraft:ladder,minecraft:composter,minecraft:note_block,minecraft:loom,minecraft:cartography_table,minecraft:fletching_table,minecraft:smithing_table damage 15 pass
 break minecraft:melon,minecraft:pumpkin,minecraft:carved_pumpkin,minecraft:jack_o_lantern hits 4 drop
-hit * particles=block*6,minecraft:smoke*1 sound=block/0.6
-hit @metal particles=block*4,minecraft:crit*2 sound=hbm:metal_impact/0.5
-whizz sound=ntmgunfeel:bullet.whizz/0.9 radius=3
+hit * particles=block*6,minecraft:smoke*1 sound=block/0.6 range=40
+hit @metal particles=block*4,minecraft:crit*2 sound=hbm:metal_impact/0.5 range=40
+whizz sound=ntmgunfeel:bullet.whizz/0.9 radius=3 crack=ntmgunfeel:bullet.crack/0.7 crackradius=1.2

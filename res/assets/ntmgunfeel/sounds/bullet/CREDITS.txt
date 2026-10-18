@@ -2,3 +2,6 @@ Bullet whizz sounds, all CC0 1.0 (public domain) from freesound.org, cut, mixed 
 whizz1  "Whizzby" by Daleonfire               https://freesound.org/people/Daleonfire/sounds/505238/
 whizz2  "Fly-by whiz SFX (subsonic)" by modusmogulus  https://freesound.org/people/modusmogulus/sounds/789222/
 whizz3-6 "Bullet Fly By" by GO_s0unds123      https://freesound.org/people/GO_s0unds123/sounds/730351/
+whizz7  zip of "bullet zip and hit" by TheLittleCrow  https://freesound.org/people/TheLittleCrow/sounds/496509/
+crack1  "Bullet Crack.wav" by morganpurkis     https://freesound.org/people/morganpurkis/sounds/386854/
+crack2  "Real Bullet Flyby Sound" by qubodup   https://freesound.org/people/qubodup/sounds/855248/
