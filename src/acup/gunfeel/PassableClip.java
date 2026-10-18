@@ -77,6 +77,9 @@ public final class PassableClip extends ClipContext {
             } else if (hit.isInside() && masks().containsKey(state.getBlock())) {
                 // already inside a see-through block (the last tick or frame ended there after it came in through a
                 // clear pixel): its faces were passed, it flies on
+            } else if (masks().containsKey(state.getBlock()) && hiddenFace(level, hit, state)) {
+                // came in through a face its neighbour hides (two copper grates or iron bars side by side are drawn as
+                // one thick grate, with no face between them): no pixel there to meet
             } else if (solid(state, hit)) {
                 return hit;
             }
@@ -310,6 +313,20 @@ public final class PassableClip extends ClipContext {
             org.slf4j.LoggerFactory.getLogger("ntm-gunfeel").warn("Could not read the bullet masks", e);
         }
         return masks = out;
+    }
+
+    // the hit lies on the block's own face toward a neighbour that hides that face (it is not drawn)
+    private static boolean hiddenFace(BlockGetter level, BlockHitResult hit, BlockState state) {
+        Direction face = hit.getDirection();
+        BlockPos pos = hit.getBlockPos();
+        double at = switch (face.getAxis()) {
+            case X -> hit.getLocation().x - pos.getX();
+            case Y -> hit.getLocation().y - pos.getY();
+            case Z -> hit.getLocation().z - pos.getZ();
+        };
+        double edge = face.getAxisDirection() == Direction.AxisDirection.POSITIVE ? 1.0 : 0.0;
+        if (Math.abs(at - edge) > 1e-5) return false;
+        return !net.minecraft.world.level.block.Block.shouldRenderFace(state, level.getBlockState(pos.relative(face)), face);
     }
 
     // true unless the block has a mask and the hit lands on one of its clear pixels
