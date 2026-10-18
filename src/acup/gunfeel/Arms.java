@@ -451,8 +451,21 @@ public final class Arms {
                 Matrix4f m = pose(right, slim, p, null, geometry.fraction(grip[i][2]), bodyInCamera, off, p, false,
                         new Quaternionf(), 0F, mix);
                 rollNow = Float.NaN;
-                branch = "path w=" + fmt(onPath[0]);
-                submit(collector, light, arm, skin, new Matrix4f(CAMERA).mul(m), lastCrop, right, slim, sleeveShown, sleeve);
+                int crop = lastCrop;
+                // armPathBlend (per gun): near the grip the path arm turns into the usual hold (size, turn, cut),
+                // blended around the hand, so leaving and taking the grip does not jump
+                if (Config.armPathBlend && w < 1F) {
+                    Vector3f hc = home.transformPosition(grip[i + 2][0], grip[i + 2][1], grip[i + 2][2], new Vector3f());
+                    Quaternionf hown = new Quaternionf().slerp(twist, right ? followRight : followLeft).normalize();
+                    if (!Float.isFinite(hown.x + hown.y + hown.z + hown.w)) hown.identity();
+                    Matrix4f usual = pose(right, slim, g, HAVE_FOLLOW[i] ? null : profiles(item)[i], geometry.fraction(grip[i][2]), bodyInCamera,
+                            down, hc, !right && !inspect, hown, inspect && !right ? Config.armInspectDrop : 0F, r);
+                    float e = w * w * (3F - 2F * w);
+                    m = blendAtHand(usual, lastCrop, m, crop, e, right, slim);
+                    crop = blendCrop;
+                }
+                branch = "path w=" + fmt(onPath[0]) + (Config.armPathBlend ? " blend" : "");
+                submit(collector, light, arm, skin, new Matrix4f(CAMERA).mul(m), crop, right, slim, sleeveShown, sleeve);
                 continue;
             }
             if (debugArms) branchNote = "carry " + (carryState(i) == null ? "none" : "w=" + fmt(carryState(i)[0])) + " follow=" + HAVE_FOLLOW[2 + i];
@@ -1203,6 +1216,24 @@ public final class Arms {
         Vector3f sc = a.getScale(new Vector3f()).lerp(b.getScale(new Vector3f()), w);
         Quaternionf q = a.getNormalizedRotation(new Quaternionf()).slerp(b.getNormalizedRotation(new Quaternionf()), w);
         return new Matrix4f().translation(t).rotate(q).scale(sc);
+    }
+
+    // pixels of arm shown by the last blendAtHand
+    private static int blendCrop = 12;
+
+    // Between two arm poses, turned and sized around the hand (the point the arm holds stays on the line
+    // between the two hands); the shown length is blended too, the cut goes pixel by pixel.
+    private static Matrix4f blendAtHand(Matrix4f a, int cropA, Matrix4f b, int cropB, float w, boolean right, boolean slim) {
+        Vector3f pivot = new Vector3f((right ? -1F : 1F) * (slim ? 5.5F : 6F) / 16F, 12F / 16F, 0F);
+        Vector3f h = a.transformPosition(pivot, new Vector3f()).lerp(b.transformPosition(pivot, new Vector3f()), w);
+        Vector3f sa = a.getScale(new Vector3f()), sb = b.getScale(new Vector3f());
+        float shown = sa.y * cropA + (sb.y * cropB - sa.y * cropA) * w;
+        int crop = Math.clamp(Math.round(cropA + (cropB - cropA) * w), 1, 12);
+        blendCrop = crop;
+        Vector3f sc = new Vector3f(sa).lerp(sb, w);
+        sc.y = shown / crop;
+        Quaternionf q = a.getNormalizedRotation(new Quaternionf()).slerp(b.getNormalizedRotation(new Quaternionf()), w);
+        return new Matrix4f().translation(h).rotate(q).scale(sc).translate(new Vector3f(pivot).negate());
     }
 
     // The arm's pose in camera space (before CAMERA); lastCrop is set to the pixels of arm it shows.
