@@ -1232,7 +1232,8 @@ public final class Arms {
         blendCrop = crop;
         Vector3f sc = new Vector3f(sa).lerp(sb, w);
         sc.y = shown / crop;
-        Quaternionf q = a.getNormalizedRotation(new Quaternionf()).slerp(b.getNormalizedRotation(new Quaternionf()), w);
+        // rotation(): JOML getNormalizedRotation is wrong for an arm scaled unevenly (length vs thickness)
+        Quaternionf q = rotation(a).slerp(rotation(b), w);
         return new Matrix4f().translation(h).rotate(q).scale(sc).translate(new Vector3f(pivot).negate());
     }
 
