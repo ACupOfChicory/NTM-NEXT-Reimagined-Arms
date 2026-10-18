@@ -25,6 +25,7 @@ import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.client.resources.model.geometry.BakedQuad;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.util.Mth;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.core.BlockPos;
@@ -675,7 +676,7 @@ public final class Tracers {
         List<C> cs = new ArrayList<>();
         for (RenderedMesh.Tri t : tris) {
             double k = t.cross(o, d);
-            if (Double.isNaN(k) || k < -1.0 || k > 3.0) continue;
+            if (Double.isNaN(k) || k < -1.0 || k > Math.max(3.0, reachTo + 1.0)) continue;
             double from = !plain.contains(t) ? 0.0 : shape != null && pos.equals(t.block()) ? 0.89 : 0.99;
             String why;
             Vector3d pt = new Vector3d(d).mul(k).add(o);
@@ -708,11 +709,33 @@ public final class Tracers {
         dbg("  {} crossing tris, chosen: {}", cs.size(), met == null ? "NONE" : String.format(java.util.Locale.ROOT, "k=%.4f", best));
     }
 
+    // how far the bullet's line runs on from the hit through blocks of the hit block's mod (the machine's cells and
+    // core), up to 3 blocks, plus a little past where it leaves them
+    private static double throughMachine(ClientLevel level, Vec3 at, Vec3 dir, BlockState hitState) {
+        String ns = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(hitState.getBlock()).getNamespace();
+        Vec3 nd = dir.normalize();
+        BlockPos.MutableBlockPos q = new BlockPos.MutableBlockPos();
+        double k = 0.0;
+        for (; k < 3.0; k += 0.05) {
+            q.set(Mth.floor(at.x + nd.x * (k + 1e-3)), Mth.floor(at.y + nd.y * (k + 1e-3)), Mth.floor(at.z + nd.z * (k + 1e-3)));
+            BlockState st = level.getBlockState(q);
+            if (st.isAir() || !net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(st.getBlock()).getNamespace().equals(ns)) break;
+        }
+        return Math.min(3.0, k + 0.05);
+    }
+
     private static boolean drawnHole(ClientLevel level, BlockHitResult hit, BulletConfig config, Vec3 dir) {
         long started = System.nanoTime();
         BlockPos pos = hit.getBlockPos();
         AABB cell = new AABB(pos);
+        BlockState hitState = level.getBlockState(pos);
+        long[] shape = PassableClip.shape(hitState);
+        // a machine's model may lie deeper than a block past where the bullet met its hitbox (a stirling's plate under
+        // its top cells, a cyclotron's deck below its side cells, hit at a slant): its surface is looked for as far as
+        // the line runs through the machine's blocks
+        double through = shape == null ? throughMachine(level, hit.getLocation(), dir, hitState) : 0.0;
         AABB around = cell.inflate(1.0);
+        if (through > 1.0) around = around.minmax(new AABB(hit.getLocation(), hit.getLocation().add(dir.normalize().scale(through))).inflate(1.0));
         List<RenderedMesh.Tri> tris = new ArrayList<>(RenderedMesh.within(level, around));
         boolean drawn = false;
         for (RenderedMesh.Tri t : tris) if (t.meets(cell)) {
@@ -736,9 +759,7 @@ public final class Tracers {
         // hit on (the bullet went through those before it). A block met by its model's pixels (a door, a scaffold) was
         // met on a 1/16 voxel: its own faces from a voxel before, and nothing much further (a door stops the bullet
         // where it came in: never its far inner face, seen through its window)
-        BlockState hitState = level.getBlockState(pos);
-        long[] shape = PassableClip.shape(hitState);
-        double reachTo = shape == null ? 2.0 : PassableClip.shell(shape) ? 1.1 : 1.15;
+        double reachTo = shape == null ? 1.0 + Math.max(1.0, through) : PassableClip.shell(shape) ? 1.1 : 1.15;
         Vector3d o = new Vector3d(hit.getLocation().x, hit.getLocation().y, hit.getLocation().z).sub(new Vector3d(d));
         double best = Double.POSITIVE_INFINITY;
         RenderedMesh.Tri met = null;
