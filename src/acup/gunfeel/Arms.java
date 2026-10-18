@@ -79,6 +79,7 @@ public final class Arms {
 
     // the parts NTM drew this frame (of the first model it drew) and where
     private static final int MAX_PARTS = 128;
+    private static final Matrix4f FROM_ALIGNED = new Matrix4f();
     private static final int[] FRAME_PART = new int[MAX_PARTS];
     private static final Matrix4f[] FRAME_POSE = new Matrix4f[MAX_PARTS];
     private static int frameParts;
@@ -259,6 +260,7 @@ public final class Arms {
         }
         // model space -> the gun's aligned frame (a whole-quarter-turn rotation: its inverse is its transpose)
         Matrix4f fromAligned = new Matrix4f().set(new org.joml.Matrix3f(geometry.toAligned).transpose());
+        FROM_ALIGNED.set(fromAligned);
         BODY.mul(fromAligned);
         for (int i = 0; i < 4; i++) if (HAVE_FOLLOW[i]) FOLLOW[i].mul(fromAligned);
         REL.set(KICKED).invert().mul(BODY);
@@ -391,6 +393,43 @@ public final class Arms {
             if (!r.valid) continue;
             if (atRest) {
                 submit(collector, light, arm, skin, new Matrix4f(CAMERA).mul(r.local), r.crop, right, slim, sleeveShown, sleeve);
+                continue;
+            }
+            // A hand goes from part to part during an animation (armLeftPath / armRightPath).
+            float[] onPath = pathState(i, cameraInv);
+            if (onPath != null) {
+                Matrix4f home = HAVE_FOLLOW[i] ? new Matrix4f(cameraInv).mul(FOLLOW[i]) : bodyInCamera;
+                Vector3f g = home.transformPosition(grip[i][0], grip[i][1], grip[i][2], new Vector3f());
+                Vector3f at = new Vector3f(onPath[1], onPath[2], onPath[3]);
+                Vector3f side = new Vector3f(onPath[4], onPath[5], onPath[6]);
+                float w = onPath[0];
+                Vector3f p = new Vector3f(g).lerp(at, w);
+                Vector3f off = new Vector3f(down).lerp(side, w);
+                if (off.lengthSquared() < 1e-6F) off.set(side);
+                ArmRest there = new ArmRest();
+                restArm(there, right, slim, p, off, p, axisPoint,
+                        right ? Config.armDirRight : Config.armDirLeft, right ? Config.armReachRight : Config.armReachLeft,
+                        right ? Config.armLoadScaleRight : Config.armLoadScaleLeft);
+                ArmRest mix = r;
+                if (there.valid) {
+                    mix = new ArmRest();
+                    mix.valid = true;
+                    mix.length = r.length + (there.length - r.length) * w;
+                    mix.s = r.s + (there.s - r.s) * w;
+                    mix.hand.set(r.hand);
+                    mix.shoulder.set(r.shoulder);
+                    mix.axis.set(r.axis);
+                    mix.center.set(r.center);
+                    mix.local.set(r.local);
+                    mix.crop = r.crop;
+                }
+                float holdRoll = right ? Config.armRollRight : Config.armRollLeft;
+                float loadRoll = right ? Config.armLoadRollRight : Config.armLoadRollLeft;
+                rollNow = Float.isNaN(loadRoll) ? Float.NaN : holdRoll + (loadRoll - holdRoll) * w;
+                Matrix4f m = pose(right, slim, p, null, geometry.fraction(grip[i][2]), bodyInCamera, off, p, false,
+                        new Quaternionf(), 0F, mix);
+                rollNow = Float.NaN;
+                submit(collector, light, arm, skin, new Matrix4f(CAMERA).mul(m), lastCrop, right, slim, sleeveShown, sleeve);
                 continue;
             }
             // A hand leaves the gun to carry something NTM animates (shells into the chambers or the tube) and comes back.
@@ -665,6 +704,118 @@ public final class Arms {
     // retraces its path), or @x,y,z = a fixed point instead of the bus. An animation name may be followed by
     // /<bus> to apply only to animations that have that bus (SPAS-12: RELOAD/PumpGrip = the empty reload).
     // Each entry: {t, w, kind (0 live, 1 bus time, 2 fixed point), b, x, y, z}
+    // armLeftPath / armRightPath: one key, ms -> grip (part null) or a point of a part as drawn
+    private record PathKey(float ms, String part, int nth, float[] at, float[] side) {
+    }
+
+    private static final String[] pathSource = new String[2];
+    @SuppressWarnings("unchecked")
+    private static final Map<String, List<PathKey>>[] pathKeys = new Map[] {Map.of(), Map.of()};
+
+    private static Map<String, List<PathKey>> parsePath(String src) {
+        Map<String, List<PathKey>> out = new HashMap<>();
+        for (String anim : src.split(";")) {
+            String[] w = anim.trim().split("\\s+");
+            if (w.length < 2) continue;
+            List<PathKey> list = new ArrayList<>();
+            for (int j = 1; j < w.length; j++) {
+                try {
+                    String e = w[j];
+                    int colon = e.indexOf(':');
+                    float ms = Float.parseFloat(e.substring(0, colon));
+                    String t = e.substring(colon + 1);
+                    PathKey k;
+                    if (t.equalsIgnoreCase("grip")) {
+                        k = new PathKey(ms, null, 0, null, null);
+                    } else {
+                        int at = t.indexOf('@');
+                        String part = t.substring(0, at), pt = t.substring(at + 1);
+                        int nth = 0;
+                        int hash = part.indexOf('#');
+                        if (hash >= 0) {
+                            String n = part.substring(hash + 1);
+                            nth = n.equalsIgnoreCase("last") ? -1 : Integer.parseInt(n);
+                            part = part.substring(0, hash);
+                        }
+                        int sl = pt.indexOf('/');
+                        float[] side = sl < 0 ? NO_CARRY.dir : xyz(pt.substring(sl + 1));
+                        k = new PathKey(ms, part, nth, xyz(sl < 0 ? pt : pt.substring(0, sl)), side);
+                    }
+                    if (!list.isEmpty() && ms <= list.get(list.size() - 1).ms()) continue;
+                    list.add(k);
+                } catch (RuntimeException e) {
+                    // skip a malformed entry
+                }
+            }
+            if (list.isEmpty()) continue;
+            int slash = w[0].indexOf('/');
+            String name = slash < 0 ? w[0].toUpperCase(java.util.Locale.ROOT)
+                    : w[0].substring(0, slash).toUpperCase(java.util.Locale.ROOT) + w[0].substring(slash);
+            out.put(name, list);
+        }
+        return out;
+    }
+
+    // the part's pose this frame (in the gun's aligned frame), or null when it was not drawn
+    private static Matrix4f partPose(String name, int nth) {
+        int id = partByName(frameModel, name);
+        if (id < 0) return null;
+        int found = -1, n = 0;
+        for (int k = 0; k < frameParts; k++) {
+            if (FRAME_PART[k] != id) continue;
+            if (nth < 0 || n == nth) found = k;
+            if (n++ == nth) break;
+        }
+        return found < 0 ? null : new Matrix4f(FRAME_POSE[found]).mul(FROM_ALIGNED);
+    }
+
+    // {weight on the path (0 = at the grip), point x,y,z, side x,y,z} in camera space, or null when off the path
+    private static float[] pathState(int hand, Matrix4f cameraInv) {
+        String src = hand == 0 ? Config.armRightPath : Config.armLeftPath;
+        if (src.isEmpty()) return null;
+        if (!src.equals(pathSource[hand])) {
+            pathSource[hand] = src;
+            pathKeys[hand] = parsePath(src);
+        }
+        List<PathKey> k = forAnimation(pathKeys[hand]);
+        if (k == null) return null;
+        float t = animMillis();
+        PathKey a = k.get(0), b = a;
+        float u = 0F;
+        if (t >= k.get(k.size() - 1).ms()) a = b = k.get(k.size() - 1);
+        else if (t > a.ms()) {
+            for (int j = 1; j < k.size(); j++) {
+                if (t < k.get(j).ms()) {
+                    a = k.get(j - 1);
+                    b = k.get(j);
+                    u = (t - a.ms()) / Math.max(b.ms() - a.ms(), 1F);
+                    break;
+                }
+            }
+        }
+        float s = u * u * (3F - 2F * u);
+        float[] pa = pathPoint(a, cameraInv), pb = pathPoint(b, cameraInv);
+        if (pa == null && pb == null) return null;
+        if (pa == null) return new float[] {s, pb[0], pb[1], pb[2], pb[3], pb[4], pb[5]};
+        if (pb == null) return new float[] {1F - s, pa[0], pa[1], pa[2], pa[3], pa[4], pa[5]};
+        float[] out = new float[7];
+        out[0] = 1F;
+        for (int j = 0; j < 6; j++) out[j + 1] = pa[j] + (pb[j] - pa[j]) * s;
+        return out;
+    }
+
+    // a key's point and side in camera space; null for grip (or a part not drawn)
+    private static float[] pathPoint(PathKey key, Matrix4f cameraInv) {
+        if (key.part() == null) return null;
+        Matrix4f pose = partPose(key.part(), key.nth());
+        if (pose == null) return null;
+        Matrix4f within = new Matrix4f(cameraInv).mul(pose);
+        Vector3f at = within.transformPosition(key.at()[0], key.at()[1], key.at()[2], new Vector3f());
+        Vector3f d = new Vector3f(key.side());
+        Vector3f side = within.transformDirection(new Vector3f(d)).normalize().mul(d.length());
+        return new float[] {at.x, at.y, at.z, side.x, side.y, side.z};
+    }
+
     private static Map<String, List<float[]>> parseCarryKeys(String src) {
         Map<String, List<float[]>> out = new HashMap<>();
         for (String anim : src.split(";")) {

@@ -77,6 +77,7 @@ public final class Config {
     public static String armLeftCarry = "";
     public static String armLeftCarryReload = "", armRightCarryReload = "";
     public static String armLeftCarryKeys = "";
+    public static String armLeftPath = "", armRightPath = "";
     // arm thickness before armScale, the same on every gun (Maresleg / Old Classic); 0 = grows with the arm's length
     public static float armBaseRight = 1.70F;
     public static float armBaseLeft = 3.02F;
@@ -169,6 +170,12 @@ public final class Config {
             armRightCarryKeys, armLeftCarryKeys: how much the hand is on the carried thing, per animation:
               "RELOAD 650:0 900:1 1300:1 1500:0" = ms:weight; ms:weight/b takes the thing where the bus has it at b ms
               (walking b back retraces its path); ms:weight@x,y,z = a fixed spot instead; RELOAD/<bus> = only when that bus plays
+            armLeftPath, armRightPath: the hand goes from part to part during an NTM animation, per animation:
+              "RELOAD 0:grip 60:Lever@0.5,1,-7 200:Lever@0.5,1,-7 260:Hood@0,1,-5.3/0,1,0 ...; INSPECT ..." = ms:target,
+              target = grip (its place on the gun) or <part>@x,y,z[/dx,dy,dz]: point x,y,z of that part as drawn now
+              (moved by the animation), held from side dx,dy,dz (default 0,0,-1, length as in armLeftCarry);
+              <part>#last / <part>#n = the last / n-th (from 0) time that part is drawn this frame (a belt drawn link by link).
+              Between two keys the hand moves smoothly from one target to the other; used instead of armLeftCarry
             Every value except enabled can be overridden per gun in config/ntm-gunfeel-guns.properties
             (hbm\\:gun_maresleg.armRollLeft = -55) or with /gunfeel set <key> <value> for the held gun.
             Hand positions per gun: <gun>.right / <gun>.left there, or /gunfeel grip""";
@@ -303,6 +310,8 @@ public final class Config {
         armLeftCarryReload = p.getProperty("armLeftCarryReload", armLeftCarryReload).trim();
         armRightCarryReload = p.getProperty("armRightCarryReload", armRightCarryReload).trim();
         armLeftCarryKeys = p.getProperty("armLeftCarryKeys", armLeftCarryKeys).trim();
+        armLeftPath = p.getProperty("armLeftPath", armLeftPath).trim();
+        armRightPath = p.getProperty("armRightPath", armRightPath).trim();
         armBaseRight = num(p, "armBaseRight", armBaseRight);
         armBaseLeft = num(p, "armBaseLeft", armBaseLeft);
         armLoadScaleRight = num(p, "armLoadScaleRight", armLoadScaleRight);
@@ -392,6 +401,8 @@ public final class Config {
         p.setProperty("armLeftCarryReload", armLeftCarryReload);
         p.setProperty("armRightCarryReload", armRightCarryReload);
         p.setProperty("armLeftCarryKeys", armLeftCarryKeys);
+        p.setProperty("armLeftPath", armLeftPath);
+        p.setProperty("armRightPath", armRightPath);
         p.setProperty("armBaseRight", Float.toString(armBaseRight));
         p.setProperty("armBaseLeft", Float.toString(armBaseLeft));
         p.setProperty("armLoadScaleRight", Float.toString(armLoadScaleRight));
