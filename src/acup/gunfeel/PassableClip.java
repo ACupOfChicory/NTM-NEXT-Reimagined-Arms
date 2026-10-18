@@ -63,8 +63,10 @@ public final class PassableClip extends ClipContext {
             if (cells != null) {
                 // a block of a big model (NTM's cargo door): its cells as drawn, then its solid parts (an elevator's
                 // platform) as NTM has them
+                // whichever the bullet meets first: the elevator's platform lies over its base, in the same block
                 BlockHitResult in = march(cells, hit, to.subtract(from), 64);
-                if (in == null) in = Structures.solid(level, hit.getBlockPos(), state, from, to);
+                BlockHitResult solid = Structures.solid(level, hit.getBlockPos(), state, from, to);
+                if (solid != null && (in == null || solid.getLocation().distanceToSqr(from) < in.getLocation().distanceToSqr(from))) in = solid;
                 if (in != null) return in;
             } else if (vox != null) {
                 // a shell (its model closes the hitbox all round: a door, a trapdoor, a lantern) is decided where the
