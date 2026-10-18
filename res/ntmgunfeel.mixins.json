@@ -4,6 +4,6 @@
   "package": "acup.gunfeel.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": ["MixinHoldAim", "MixinBulletServer", "MixinThrowableHit"],
-  "client": ["MixinItemGunBaseNT", "MixinItemRenderWeaponBase", "MixinHbmAnimations", "MixinClientRegistry", "MixinWholeModelGuns", "MixinGunConfigAnims", "MixinRenderBulletMK4", "MixinLegoClient", "MixinSubmitNodeCollection", "MixinHbmVisual"],
+  "client": ["MixinItemGunBaseNT", "MixinItemRenderWeaponBase", "MixinHbmAnimations", "MixinClientRegistry", "MixinWholeModelGuns", "MixinGunConfigAnims", "MixinRenderBulletMK4", "MixinLegoClient", "MixinSubmitNodeCollection", "MixinHbmVisual", "MixinItemInHandRenderer", "MixinHbmAnimationPayload"],
   "injectors": { "defaultRequire": 1 }
 }

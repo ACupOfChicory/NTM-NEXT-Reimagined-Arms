@@ -79,6 +79,8 @@ public final class Config {
     public static String armLeftCarryKeys = "";
     public static String armLeftPath = "", armRightPath = "";
     public static float armPathMinLength = 0F;
+    public static String armPathTimes = "";
+    public static boolean instantSwitch = true;
     // arm thickness before armScale, the same on every gun (Maresleg / Old Classic); 0 = grows with the arm's length
     public static float armBaseRight = 1.70F;
     public static float armBaseLeft = 3.02F;
@@ -181,6 +183,10 @@ public final class Config {
               turns the arm (Sexy's box: "<" the lower arm to the left so it misses the gun)
             armPathMinLength: an arm on its path (armLeftPath) shows at least this many arm pixels (0 = cut wherever
               the reach plane cuts it; a hand right in front of the eye then shows only a pixel or two)
+            armPathTimes: named times for armLeftPath / armRightPath, "release=2350,grab=1400": a key's ms may then be
+              a name or name+ms / name-ms ("release:Magazine@... release+300:Gun@..."), so a moment is set in one place
+            instantSwitch: switching to or from an NTM gun shows the new slot at once: the old gun is not drawn up
+              until the next tick, and the new gun starts its draw animation without waiting for the server
             Every value except enabled can be overridden per gun in config/ntm-gunfeel-guns.properties
             (hbm\\:gun_maresleg.armRollLeft = -55) or with /gunfeel set <key> <value> for the held gun.
             Hand positions per gun: <gun>.right / <gun>.left there, or /gunfeel grip""";
@@ -318,6 +324,8 @@ public final class Config {
         armLeftPath = p.getProperty("armLeftPath", armLeftPath).trim();
         armRightPath = p.getProperty("armRightPath", armRightPath).trim();
         armPathMinLength = num(p, "armPathMinLength", armPathMinLength);
+        armPathTimes = p.getProperty("armPathTimes", armPathTimes).trim();
+        instantSwitch = bool(p, "instantSwitch", instantSwitch);
         armBaseRight = num(p, "armBaseRight", armBaseRight);
         armBaseLeft = num(p, "armBaseLeft", armBaseLeft);
         armLoadScaleRight = num(p, "armLoadScaleRight", armLoadScaleRight);
@@ -410,6 +418,8 @@ public final class Config {
         p.setProperty("armLeftPath", armLeftPath);
         p.setProperty("armRightPath", armRightPath);
         p.setProperty("armPathMinLength", Float.toString(armPathMinLength));
+        p.setProperty("armPathTimes", armPathTimes);
+        p.setProperty("instantSwitch", Boolean.toString(instantSwitch));
         p.setProperty("armBaseRight", Float.toString(armBaseRight));
         p.setProperty("armBaseLeft", Float.toString(armBaseLeft));
         p.setProperty("armLoadScaleRight", Float.toString(armLoadScaleRight));

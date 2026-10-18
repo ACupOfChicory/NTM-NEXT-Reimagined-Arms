@@ -728,7 +728,28 @@ public final class Arms {
     @SuppressWarnings("unchecked")
     private static final Map<String, List<PathKey>>[] pathKeys = new Map[] {Map.of(), Map.of()};
 
-    private static Map<String, List<PathKey>> parsePath(String src) {
+    // a key's time: milliseconds, or a name from armPathTimes with an optional +ms / -ms ("release+300")
+    private static float pathMs(String e, Map<String, Float> times) {
+        Float whole = times.get(e.toLowerCase(java.util.Locale.ROOT));
+        if (whole != null) return whole;
+        int op = Math.max(e.lastIndexOf('+'), e.lastIndexOf('-'));
+        if (op <= 0 || Character.isDigit(e.charAt(0))) return Float.parseFloat(e);
+        Float base = times.get(e.substring(0, op).trim().toLowerCase(java.util.Locale.ROOT));
+        if (base == null) throw new IllegalArgumentException(e);
+        return base + Float.parseFloat(e.substring(op));
+    }
+
+    private static Map<String, List<PathKey>> parsePath(String src, String timeSrc) {
+        Map<String, Float> times = new HashMap<>();
+        for (String t : timeSrc.split(",")) {
+            int eq = t.indexOf('=');
+            if (eq <= 0) continue;
+            try {
+                times.put(t.substring(0, eq).trim().toLowerCase(java.util.Locale.ROOT), Float.parseFloat(t.substring(eq + 1).trim()));
+            } catch (NumberFormatException e) {
+                // skip
+            }
+        }
         Map<String, List<PathKey>> out = new HashMap<>();
         for (String anim : src.split(";")) {
             String[] w = anim.trim().split("\\s+");
@@ -738,7 +759,7 @@ public final class Arms {
                 try {
                     String e = w[j];
                     int colon = e.indexOf(':');
-                    float ms = Float.parseFloat(e.substring(0, colon));
+                    float ms = pathMs(e.substring(0, colon), times);
                     String t = e.substring(colon + 1);
                     PathKey k;
                     if (t.equalsIgnoreCase("grip")) {
@@ -760,13 +781,15 @@ public final class Arms {
                         float[] side = sl < 0 ? NO_CARRY.dir : xyz(pt.substring(sl + 1));
                         k = new PathKey(ms, part, nth, xyz(sl < 0 ? pt : pt.substring(0, sl)), side, shoulder);
                     }
-                    if (!list.isEmpty() && ms <= list.get(list.size() - 1).ms()) continue;
                     list.add(k);
                 } catch (RuntimeException e) {
                     // skip a malformed entry
                 }
             }
             if (list.isEmpty()) continue;
+            // in time order (a named time may put a key anywhere); of two keys at one time the first stays
+            list.sort(java.util.Comparator.comparingDouble(PathKey::ms));
+            for (int j = list.size() - 1; j > 0; j--) if (list.get(j).ms() <= list.get(j - 1).ms()) list.remove(j);
             int slash = w[0].indexOf('/');
             String name = slash < 0 ? w[0].toUpperCase(java.util.Locale.ROOT)
                     : w[0].substring(0, slash).toUpperCase(java.util.Locale.ROOT) + w[0].substring(slash);
@@ -792,9 +815,10 @@ public final class Arms {
     private static float[] pathState(int hand, Matrix4f cameraInv) {
         String src = hand == 0 ? Config.armRightPath : Config.armLeftPath;
         if (src.isEmpty()) return null;
-        if (!src.equals(pathSource[hand])) {
-            pathSource[hand] = src;
-            pathKeys[hand] = parsePath(src);
+        String srcKey = src + "\n" + Config.armPathTimes;
+        if (!srcKey.equals(pathSource[hand])) {
+            pathSource[hand] = srcKey;
+            pathKeys[hand] = parsePath(src, Config.armPathTimes);
         }
         List<PathKey> k = forAnimation(pathKeys[hand]);
         if (k == null) return null;
