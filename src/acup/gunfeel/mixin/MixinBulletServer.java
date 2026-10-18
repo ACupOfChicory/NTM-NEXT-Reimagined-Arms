@@ -18,7 +18,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.network.PacketDistributor;
 
-// Server: bullets fly faster (bulletSpeed in ntm-gunfeel-server.properties, TaCZ-like) and every new bullet is
+// Server: explosive bullets shatter glass; bullets fly faster (bulletSpeed in ntm-gunfeel-server.properties, TaCZ-like) and every new bullet is
 // announced to the players around, who draw its tracer and hole themselves.
 @Mixin(value = EntityBulletBaseMK4.class, remap = false)
 public abstract class MixinBulletServer {
@@ -35,6 +35,19 @@ public abstract class MixinBulletServer {
     @Inject(method = "motionMult", at = @At("RETURN"), cancellable = true)
     private void gunfeel$speed(CallbackInfoReturnable<Double> cir) {
         if (config != null && config.velocity >= 5F) cir.setReturnValue(cir.getReturnValue() * ReaimTimes.number("bulletSpeed", 1.6F));
+    }
+
+    // a bullet that blows up where it hits (explosive buckshot) breaks the glass it hits, as a plain bullet does (NTM
+    // breaks blocks that sound like glass and glowstone), and blows up there: an impact fuze goes off on the glass
+    @Inject(method = "onImpact", at = @At("HEAD"))
+    private void gunfeel$shatter(net.minecraft.world.phys.HitResult mop, CallbackInfo ci) {
+        EntityBulletBaseMK4 self = (EntityBulletBaseMK4) (Object) this;
+        if (config == null || config.onImpact == null || self.level().isClientSide()
+                || !(mop instanceof net.minecraft.world.phys.BlockHitResult hit)) return;
+        net.minecraft.world.level.block.state.BlockState state = self.level().getBlockState(hit.getBlockPos());
+        if (state.instrument() == net.minecraft.world.level.block.state.properties.NoteBlockInstrument.HAT
+                || state.is(net.minecraft.world.level.block.Blocks.GLOWSTONE))
+            self.level().destroyBlock(hit.getBlockPos(), false);
     }
 
     @Inject(method = "tick", at = @At("HEAD"))

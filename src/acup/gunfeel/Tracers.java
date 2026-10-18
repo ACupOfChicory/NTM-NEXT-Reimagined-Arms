@@ -1474,48 +1474,95 @@ public final class Tracers {
             for (Hole h : HOLES) if (h.kind() == kind && h.late() == late && h.cull() == cull) list.add(h);
             if (list.isEmpty()) continue;
             RenderType type = HoleRender.type(TEXTURES[kind], late, cull);
-            // holes on glass go after the glass but before the translucent particles drawn in the same phase, which
-            // write depth and would hide them (smoke over a hole): an order before 0 runs first
-            net.minecraft.client.renderer.SubmitNodeCollector.CustomGeometryRenderer draw = (p, vc) -> {
-                for (Hole h : list) {
-                    double age = (now - h.born()) / 1e9;
-                    double fadeFrom = Math.max(0.0, life / 1e9 - 3.0);
-                    int alpha = (int) (255 * Math.clamp(1.0 - (age - fadeFrom) / 3.0, 0.0, 1.0));
-                    if (alpha <= 0) continue;
-                    float half = h.size() * 0.5F;
-                    if (h.mesh() != null) {
-                        meshQuads(p, vc, h, cam, alpha);
-                        continue;
-                    }
-                    Mask m = h.mask();
-                    if (m == null) {
-                        quad(p, vc, h, cam, half, alpha, h.rect());
-                        continue;
-                    }
-                    // runs of shown cells, row by row
-                    for (int j = 0; j < m.h(); j++) {
-                        for (int i = 0; i < m.w(); i++) {
-                            if (!m.solid()[j * m.w() + i]) continue;
-                            int e = i;
-                            while (e + 1 < m.w() && m.solid()[j * m.w() + e + 1]) e++;
-                            double[] r = h.rect();
-                            double[] cell = {Math.max(r[0], (m.u0() + i) / 16.0), Math.min(r[1], (m.u0() + e + 1) / 16.0),
-                                    Math.max(r[2], (m.v0() + j) / 16.0), Math.min(r[3], (m.v0() + j + 1) / 16.0)};
-                            quad(p, vc, h, cam, half, alpha, cell);
-                            i = e;
-                        }
-                    }
-                }
-            };
-            if (late && event.getSubmitNodeCollector() instanceof net.minecraft.client.renderer.SubmitNodeStorage storage) {
-                // then their solid middles once more, into the depth only (after every hole's colour, so holes never
-                // hide each other): clouds and rain drawn later stay behind them
-                storage.order(-2).submitCustomGeometry(event.getPoseStack(), type, draw);
-                storage.order(-1).submitCustomGeometry(event.getPoseStack(), HoleRender.depthType(TEXTURES[kind], cull), draw);
-            } else {
+            net.minecraft.client.renderer.SubmitNodeCollector.CustomGeometryRenderer draw = drawer(list, cam, now, life);
+            // holes on glass: drawn after the clouds and rain (afterWeather), which show through the glass behind
+            // them. With improved transparency (clouds and rain in targets of their own) after the translucent terrain
+            // instead, before the translucent particles drawn there (an order before 0 runs first)
+            if (late && !shaderTransparency()) continue;
+            if (late && event.getSubmitNodeCollector() instanceof net.minecraft.client.renderer.SubmitNodeStorage storage)
+                storage.order(-1).submitCustomGeometry(event.getPoseStack(), type, draw);
+            else
                 event.getSubmitNodeCollector().submitCustomGeometry(event.getPoseStack(), type, draw);
+        }
+    }
+
+    private static boolean shaderTransparency() {
+        return Minecraft.getInstance().gameRenderer.gameRenderState().useShaderTransparency();
+    }
+
+    private static final Map<Integer, com.mojang.blaze3d.buffers.GpuBuffer> LATE_BUFFERS = new HashMap<>();
+
+    // holes on glass, drawn at once after the clouds and rain (RenderLevelStageEvent.AfterWeather): drawn before
+    // them, the clouds and rain behind the glass would cover the hole
+    public static void afterWeather(net.neoforged.neoforge.client.event.RenderLevelStageEvent.AfterWeather event) {
+        if (HOLES.isEmpty() || !Config.bulletHoles || shaderTransparency()) return;
+        Vec3 cam = event.getLevelRenderState().cameraRenderState.pos;
+        long now = System.nanoTime();
+        long life = (long) (Math.max(0.1F, Config.holeLife) * 1e9);
+        PoseStack.Pose pose = new PoseStack().last();
+        for (int group = 0; group < 2 * (SCORCH + 1); group++) {
+            int kind = group % (SCORCH + 1);
+            boolean cull = group >= SCORCH + 1;
+            List<Hole> list = new ArrayList<>();
+            for (Hole h : HOLES) if (h.kind() == kind && h.late() && h.cull() == cull) list.add(h);
+            if (list.isEmpty()) continue;
+            RenderType type = HoleRender.type(TEXTURES[kind], true, cull);
+            int vertices = 0;
+            for (Hole h : list) vertices += h.mesh() != null ? h.mesh().length / 2 + 8 : 4 * 256;
+            try (var bytes = new com.mojang.blaze3d.vertex.ByteBufferBuilder(Math.max(64, vertices) * type.format().getVertexSize())) {
+                var builder = new com.mojang.blaze3d.vertex.BufferBuilder(bytes, type.primitiveTopology(), type.format());
+                drawer(list, cam, now, life).render(pose, builder);
+                try (com.mojang.blaze3d.vertex.MeshData mesh = builder.build()) {
+                    if (mesh == null) continue;
+                    var device = com.mojang.blaze3d.systems.RenderSystem.getDevice();
+                    java.nio.ByteBuffer data = mesh.vertexBuffer();
+                    com.mojang.blaze3d.buffers.GpuBuffer vb = LATE_BUFFERS.get(group);
+                    if (vb == null || vb.size() < data.remaining()) {
+                        if (vb != null) vb.close();
+                        vb = device.createBuffer(() -> "Bullet hole vertices", 40, data.remaining());
+                        LATE_BUFFERS.put(group, vb);
+                    }
+                    device.createCommandEncoder().writeToBuffer(vb.slice(), data);
+                    var indices = com.mojang.blaze3d.systems.RenderSystem.getSequentialBuffer(mesh.drawState().primitiveTopology());
+                    int count = mesh.drawState().indexCount();
+                    type.prepare().drawFromBuffer(vb, indices.getBuffer(count), indices.type(), 0, 0, count);
+                }
             }
         }
+    }
+
+    private static net.minecraft.client.renderer.SubmitNodeCollector.CustomGeometryRenderer drawer(List<Hole> list, Vec3 cam, long now, long life) {
+        return (p, vc) -> {
+            for (Hole h : list) {
+                double age = (now - h.born()) / 1e9;
+                double fadeFrom = Math.max(0.0, life / 1e9 - 3.0);
+                int alpha = (int) (255 * Math.clamp(1.0 - (age - fadeFrom) / 3.0, 0.0, 1.0));
+                if (alpha <= 0) continue;
+                float half = h.size() * 0.5F;
+                if (h.mesh() != null) {
+                    meshQuads(p, vc, h, cam, alpha);
+                    continue;
+                }
+                Mask m = h.mask();
+                if (m == null) {
+                    quad(p, vc, h, cam, half, alpha, h.rect());
+                    continue;
+                }
+                // runs of shown cells, row by row
+                for (int j = 0; j < m.h(); j++) {
+                    for (int i = 0; i < m.w(); i++) {
+                        if (!m.solid()[j * m.w() + i]) continue;
+                        int e = i;
+                        while (e + 1 < m.w() && m.solid()[j * m.w() + e + 1]) e++;
+                        double[] r = h.rect();
+                        double[] cell = {Math.max(r[0], (m.u0() + i) / 16.0), Math.min(r[1], (m.u0() + e + 1) / 16.0),
+                                Math.max(r[2], (m.v0() + j) / 16.0), Math.min(r[3], (m.v0() + j + 1) / 16.0)};
+                        quad(p, vc, h, cam, half, alpha, cell);
+                        i = e;
+                    }
+                }
+            }
+        };
     }
 
     // the face's two axes: u, v as world axis indices (0 x, 1 y, 2 z)

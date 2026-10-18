@@ -20,8 +20,8 @@ import net.neoforged.neoforge.client.event.RegisterRenderPipelinesEvent;
 // Client: the render type of bullet holes. Like entity_translucent but it does not write depth (overlapping holes
 // would hide each other's soft edges, flickering as the camera moves), with a small depth bias that keeps it on top
 // of the face it lies on. Holes on glass (glass blocks, a door's clear window) are drawn "late", after the
-// translucent terrain, so the glass behind them is already there; then their solid middles go once more into the
-// depth only (DEPTH pipelines), so clouds and rain drawn after stay behind them.
+// translucent terrain and the clouds and rain (Tracers.afterWeather), so what is seen through the glass behind them
+// is already there.
 // Not sorted by distance: holes overlap in one plane, and sorting their triangles by distance flips which hole's soft
 // edge lies on top as the camera turns (patches of other shades along the triangles). They are drawn in the order
 // they were made, a newer hole over an older one.
@@ -31,24 +31,14 @@ public final class HoleRender {
     // through its see-through pixels, the far face is not drawn and neither are its holes
     public static final RenderPipeline PIPELINE_CULL = pipeline("pipeline/bullet_hole_cull", true);
 
-    public static final RenderPipeline DEPTH = pipeline("pipeline/bullet_hole_depth", false, true);
-    public static final RenderPipeline DEPTH_CULL = pipeline("pipeline/bullet_hole_depth_cull", true, true);
-
     private static RenderPipeline pipeline(String location, boolean cull) {
-        return pipeline(location, cull, false);
-    }
-
-    // depth: no colour, depth written where the hole is at least half opaque
-    private static RenderPipeline pipeline(String location, boolean cull, boolean depth) {
         return RenderPipeline.builder(entitySnippet())
             .withLocation(Identifier.fromNamespaceAndPath("ntmgunfeel", location))
-            .withShaderDefine("ALPHA_CUTOUT", depth ? 0.5F : 0.1F)
+            .withShaderDefine("ALPHA_CUTOUT", 0.1F)
             .withShaderDefine("PER_FACE_LIGHTING")
             .withBindGroupLayout(BindGroupLayouts.SAMPLER1)
-            .withColorTargetState(depth
-                    ? new ColorTargetState(java.util.Optional.of(BlendFunction.TRANSLUCENT), com.mojang.blaze3d.GpuFormat.RGBA8_UNORM, ColorTargetState.WRITE_NONE)
-                    : new ColorTargetState(BlendFunction.TRANSLUCENT))
-            .withDepthStencilState(new DepthStencilState(CompareOp.GREATER_THAN_OR_EQUAL, depth, 1.0F, 10.0F))
+            .withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
+            .withDepthStencilState(new DepthStencilState(CompareOp.GREATER_THAN_OR_EQUAL, false, 1.0F, 10.0F))
             .withCull(cull)
             .build();
     }
@@ -62,8 +52,6 @@ public final class HoleRender {
         modBus.addListener(RegisterRenderPipelinesEvent.class, e -> {
             e.registerPipeline(PIPELINE);
             e.registerPipeline(PIPELINE_CULL);
-            e.registerPipeline(DEPTH);
-            e.registerPipeline(DEPTH_CULL);
         });
     }
 
@@ -77,20 +65,6 @@ public final class HoleRender {
                     .createRenderSetup();
             RenderType type = create(late ? "ntmgunfeel_bullet_hole_late" : "ntmgunfeel_bullet_hole", setup);
             if (late) LATE_TYPES.add(type);
-            return type;
-        });
-    }
-
-    // the depth-only pass of late holes (drawn after the translucent terrain too)
-    public static RenderType depthType(Identifier texture, boolean cull) {
-        return TYPES.computeIfAbsent(texture + "|depth" + (cull ? "|cull" : ""), k -> {
-            RenderSetup setup = RenderSetup.builder(cull ? DEPTH_CULL : DEPTH)
-                    .withTexture("Sampler0", texture)
-                    .useLightmap()
-                    .useOverlay()
-                    .createRenderSetup();
-            RenderType type = create("ntmgunfeel_bullet_hole_depth", setup);
-            LATE_TYPES.add(type);
             return type;
         });
     }
