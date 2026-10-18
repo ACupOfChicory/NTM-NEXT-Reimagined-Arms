@@ -463,16 +463,6 @@ public final class Tracers {
             for (boolean b : solid) all &= b;
             if (all) mask = null;
         }
-        // many marks on one spot (a burst into the same place) cost a lot to draw up close: keep the newest few
-        Vec3 at = hit.getLocation();
-        Hole oldest = null;
-        int stacked = 0;
-        for (Hole o : HOLES) {
-            if (o.face() != hit.getDirection() || o.pos().distanceToSqr(at) > Math.pow(0.5 * Math.min(size, o.size()), 2)) continue;
-            stacked++;
-            if (oldest == null) oldest = o;
-        }
-        if (stacked >= 3 && oldest != null) HOLES.remove(oldest);
         // one-sided (seen only from outside, like the face itself) when the pixels lie on the hitbox's face: a closed
         // box such as a full cube (copper grate) or an iron door, whose far inner face shows through its see-through
         // pixels without its holes. Pixels inside the hitbox (iron bars: a plane in the middle) stay two-sided.
@@ -676,14 +666,7 @@ public final class Tracers {
         }
         // solid faces first: a see-through face over one in the same plane (grass's side overlay) adds nothing
         pieces.sort(java.util.Comparator.comparing(pc -> pc.tri().tex().seeThrough()));
-        // a shot into the same spot again and again (a burst) costs a lot to draw: keep the newest few there
         long born = System.nanoTime();
-        java.util.Set<Long> there = new java.util.LinkedHashSet<>();
-        for (Hole h : HOLES) if (h.mesh() != null && h.hit() != null && h.hit().distanceToSqr(world.x, world.y, world.z) < Math.pow(0.5 * Math.min(size, h.size()), 2)) there.add(h.born());
-        if (there.size() >= 3) {
-            long oldest = there.iterator().next();
-            HOLES.removeIf(h -> h.born() == oldest);
-        }
         // pieces grouped by what they go with (a block, a renderer's part) and by plane: each group is one hole,
         // facing its own way
         Map<Object, Group> groups = new java.util.LinkedHashMap<>();
@@ -706,6 +689,8 @@ public final class Tracers {
             int before = g.polys().size();
             if (!t.tex().seeThrough()) {
                 g.polys().add(pc.poly());
+            } else if (t.tex().grid() != null && texels(pc, t.tex(), g.polys())) {
+                // cut on the texture's own pixels
             } else {
                 // see-through pixels: rows of shown cells (1/32 block, on the hole's grid), alike rows merged
                 int i0 = (int) Math.floor((pc.box()[0] + half) / cs), i1 = (int) Math.ceil((pc.box()[1] + half) / cs);
@@ -857,6 +842,57 @@ public final class Tracers {
     private record Group(RenderedMesh.Tri first, Vector3d tn, double plane, List<List<double[]>> polys, List<Piece> solid) {
     }
 
+    // The piece cut to the shown pixels of its texture: rows of pixels (in the texture's own grid, so the cut follows
+    // the pixels exactly however the face is turned or scaled), runs merged, alike rows merged. false = too many
+    // pixels under it (a huge texture): the hole's own grid instead
+    private static boolean texels(Piece pc, RenderedMesh.Tex tex, List<List<double[]>> out) {
+        double[] gr = tex.grid();
+        double smin = Double.MAX_VALUE, smax = -Double.MAX_VALUE, tmin = Double.MAX_VALUE, tmax = -Double.MAX_VALUE;
+        for (double[] v : pc.poly()) {
+            smin = Math.min(smin, v[6]);
+            smax = Math.max(smax, v[6]);
+            tmin = Math.min(tmin, v[7]);
+            tmax = Math.max(tmax, v[7]);
+        }
+        int i0 = (int) Math.floor((smin - gr[0]) / gr[1] + 1e-6), i1 = (int) Math.ceil((smax - gr[0]) / gr[1] - 1e-6);
+        int j0 = (int) Math.floor((tmin - gr[2]) / gr[3] + 1e-6), j1 = (int) Math.ceil((tmax - gr[2]) / gr[3] - 1e-6);
+        int w = i1 - i0, h = j1 - j0;
+        if (w <= 0 || h <= 0) return true;
+        if ((long) w * h > 65536) return false;
+        boolean[][] on = new boolean[h][w];
+        boolean all = true, none = true;
+        for (int j = 0; j < h; j++) for (int i = 0; i < w; i++) {
+            boolean v = tex.opaque((float) (gr[0] + (i0 + i + 0.5) * gr[1]), (float) (gr[2] + (j0 + j + 0.5) * gr[3]));
+            on[j][i] = v;
+            all &= v;
+            none &= !v;
+        }
+        if (none) return true;
+        if (all) {
+            out.add(pc.poly());
+            return true;
+        }
+        int rowStart = 0;
+        for (int j = 0; j <= h; j++) {
+            if (j < h && j > rowStart && java.util.Arrays.equals(on[j], on[rowStart])) continue;
+            if (j > rowStart) {
+                boolean[] row = on[rowStart];
+                double t0 = gr[2] + (j0 + rowStart) * gr[3], t1 = gr[2] + (j0 + j) * gr[3];
+                for (int i = 0; i < w; i++) {
+                    if (!row[i]) continue;
+                    int e = i;
+                    while (e + 1 < w && row[e + 1]) e++;
+                    double s0 = gr[0] + (i0 + i) * gr[1], s1 = gr[0] + (i0 + e + 1) * gr[1];
+                    List<double[]> r = cut(cut(cut(cut(pc.poly(), 6, Math.min(s0, s1), true), 6, Math.max(s0, s1), false), 7, Math.min(t0, t1), true), 7, Math.max(t0, t1), false);
+                    if (r.size() >= 3) out.add(r);
+                    i = e;
+                }
+            }
+            rowStart = j;
+        }
+        return true;
+    }
+
     // the piece lies wholly on solid pieces of its group (the same plane)
     private static boolean overSolid(Group g, Piece pc) {
         if (g.solid().isEmpty()) return false;
@@ -890,7 +926,7 @@ public final class Tracers {
         List<double[]> poly = new ArrayList<>(3);
         for (int i = 0; i < 3; i++) {
             Vector3d c = t.corner(i);
-            poly.add(new double[] {0, 0, c.x, c.y, c.z, new Vector3d(c).sub(world).dot(n)});
+            poly.add(new double[] {0, 0, c.x, c.y, c.z, new Vector3d(c).sub(world).dot(n), t.uv()[i * 2], t.uv()[i * 2 + 1]});
         }
         poly = cut(poly, 5, -depth, true);
         poly = cut(poly, 5, depth, false);

@@ -72,6 +72,12 @@ public final class RenderedMesh {
 
         // it has see-through pixels anywhere
         boolean seeThrough();
+
+        // its pixel grid in its (u, v): {u of a pixel edge, pixel width, v of a pixel edge, pixel height}; null =
+        // not known (holes are then cut on a grid of their own)
+        default double @Nullable [] grid() {
+            return null;
+        }
     }
 
     public static final Tex OPAQUE = new Tex() {
@@ -829,6 +835,10 @@ public final class RenderedMesh {
             public boolean seeThrough() {
                 return clear;
             }
+
+            public double[] grid() {
+                return new double[] {0, 1.0 / w, 0, 1.0 / h};
+            }
         };
     }
 
@@ -841,6 +851,11 @@ public final class RenderedMesh {
 
             public boolean seeThrough() {
                 return atlasSprite(sprite).seeThrough();
+            }
+
+            public double[] grid() {
+                var c = sprite.contents();
+                return new double[] {0, 1.0 / c.width(), 0, 1.0 / c.height()};
             }
         };
     }
@@ -862,6 +877,10 @@ public final class RenderedMesh {
 
                 public boolean seeThrough() {
                     return any;
+                }
+
+                public double[] grid() {
+                    return new double[] {sp.getU0(), (sp.getU1() - sp.getU0()) / (double) c.width(), sp.getV0(), (sp.getV1() - sp.getV0()) / (double) c.height()};
                 }
             };
         });
