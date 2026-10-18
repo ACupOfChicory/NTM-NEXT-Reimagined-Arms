@@ -128,8 +128,9 @@ public final class Structures {
         if (core == null) return null;
         BlockState coreState = level.getBlockState(core);
         if (!atRest(level, core, coreState)) return null;
-        // the elevator's base layer (its platform at the bottom lies over the base) keeps NTM's hitbox
-        if (coreState.getBlock() instanceof BlockCargoElevator && pos.getY() == core.getY()) return null;
+        // the elevator's base layer: its cells too when the platform is known as drawn (it lies over the base at the
+        // bottom; Structures.solid meets it there), else NTM's hitbox
+        if (coreState.getBlock() instanceof BlockCargoElevator && pos.getY() == core.getY() && !ElevatorMesh.available()) return null;
         String key = key(coreState, pos.getX() - core.getX(), pos.getY() - core.getY(), pos.getZ() - core.getZ());
         Rotation r = toNorth(coreState.getValue(BlockMultiblockCore.FACING));
         String world = key + "/" + r.ordinal();
@@ -166,10 +167,12 @@ public final class Structures {
                 + " platform y=" + (core.getY() + 0.75 + elevator.extension) + ".." + (core.getY() + 1.0 + elevator.extension);
     }
 
-    // what stays NTM's in this block after its cells let the bullet through: the elevator's platform
+    // what the bullet meets in this block besides its cells: the elevator's platform (and piston)
     public static @Nullable BlockHitResult solid(Level level, BlockPos pos, BlockState state, Vec3 from, Vec3 to) {
         BlockPos core = core(level, pos, state);
         if (core == null || !(level.getBlockEntity(core) instanceof BlockEntityCargoElevator elevator)) return null;
+        // the platform and piston as drawn: only their shown pixels
+        if (ElevatorMesh.available()) return ElevatorMesh.hit(core, elevator.extension, pos, from, to);
         // BlockEntityCargoElevator.shape(): the platform, from the core
         AABB platform = new AABB(-1.0, 0.75 + elevator.extension, -1.0, 2.0, 1.0 + elevator.extension, 2.0)
                 .move(core.getX() - pos.getX(), core.getY() - pos.getY(), core.getZ() - pos.getZ());
