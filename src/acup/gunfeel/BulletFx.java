@@ -254,6 +254,10 @@ public final class BulletFx {
 
         // one crumb: a pixel near the hit (up to 2 pixels off), shaded as block crumbs are
         void spawn(ClientLevel level, Vec3 p, double vx, double vy, double vz) {
+            Minecraft.getInstance().particleEngine.add(make(level, p, vx, vy, vz));
+        }
+
+        net.minecraft.client.particle.TerrainParticle make(ClientLevel level, Vec3 p, double vx, double vy, double vz) {
             RandomSource r = level.getRandom();
             int c = 0;
             for (int i = 0; i < 4 && (c >>> 24) < 26; i++)
@@ -262,8 +266,49 @@ public final class BulletFx {
             var particle = new net.minecraft.client.particle.TerrainParticle(level, p.x, p.y, p.z, vx, vy, vz,
                     net.minecraft.world.level.block.Blocks.SNOW_BLOCK.defaultBlockState());
             particle.setColor(0.6F * ((c >> 16) & 255) / 255F, 0.6F * ((c >> 8) & 255) / 255F, 0.6F * (c & 255) / 255F);
-            Minecraft.getInstance().particleEngine.add(particle);
+            return particle;
         }
+    }
+
+    // where a block's crumbs were looked up this tick: an explosion makes a dozen at once
+    private static net.minecraft.core.BlockPos dustPos;
+    private static long dustTick = Long.MIN_VALUE;
+    private static @Nullable Crumbs dustCrumbs;
+
+    // block crumbs anyone makes (NTM's explosion debris, vanilla's) of a block with no particle texture (NTM's
+    // machine cells: purple and black squares): crumbs of the machine's drawn colours there instead, else steel-grey
+    // ones; null for every other block, made as usual
+    public static net.minecraft.client.particle.@Nullable Particle missingTextureCrumb(ClientLevel level, BlockState state,
+            double x, double y, double z, double vx, double vy, double vz) {
+        if (state.isAir() || !noParticleTexture(state)) return null;
+        Vec3 at = new Vec3(x, y, z);
+        net.minecraft.core.BlockPos c = net.minecraft.core.BlockPos.containing(x, y, z), pos = null;
+        double best = Double.MAX_VALUE;
+        for (net.minecraft.core.BlockPos q : net.minecraft.core.BlockPos.betweenClosed(c.offset(-1, -1, -1), c.offset(1, 1, 1))) {
+            if (level.getBlockState(q) != state) continue;
+            double d = Vec3.atCenterOf(q).distanceToSqr(at);
+            if (d < best) {
+                best = d;
+                pos = q.immutable();
+            }
+        }
+        Crumbs crumbs = null;
+        if (pos != null) {
+            long tick = level.getGameTime();
+            if (tick == dustTick && pos.equals(dustPos)) {
+                crumbs = dustCrumbs;
+            } else {
+                Vec3 dir = Vec3.atCenterOf(pos).subtract(at);
+                if (dir.lengthSqr() < 0.01) dir = new Vec3(0, -1, 0);
+                crumbs = Crumbs.at(level, pos, at, dir);
+                dustTick = tick;
+                dustPos = pos;
+                dustCrumbs = crumbs;
+            }
+        }
+        if (crumbs != null) return crumbs.make(level, at, vx, vy, vz);
+        return new net.minecraft.client.particle.TerrainParticle(level, x, y, z, vx, vy, vz,
+                net.minecraft.world.level.block.Blocks.IRON_BLOCK.defaultBlockState());
     }
 
     // a stretch a bullet flew this frame, a..b: it whizzes when it passed within the rule's radius of the player's eyes
