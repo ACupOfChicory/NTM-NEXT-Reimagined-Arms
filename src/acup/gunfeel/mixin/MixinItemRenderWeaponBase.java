@@ -70,6 +70,8 @@ public abstract class MixinItemRenderWeaponBase {
     // flashes white, spreading downward). Clamp it at zero. Also laid upright on guns that need it (smokeUpright).
     @Inject(method = "renderSmokeNodes", at = @At("HEAD"))
     private static void gunfeel$smoke(SubmitNodeCollector collector, PoseStack pose, java.util.List<ItemGunBaseNT.SmokeNode> nodes, double scale, int light, CallbackInfo ci) {
+        // the muzzle of the gun in the player's hands: the player's own tracers start there
+        if (GunFeel.current != null) acup.gunfeel.Tracers.muzzle(pose);
         if (!Config.enabled) return;
         try {
             for (ItemGunBaseNT.SmokeNode node : nodes) if (node.alpha < 0.0) node.alpha = 0.0;
@@ -94,11 +96,40 @@ public abstract class MixinItemRenderWeaponBase {
     @Inject(method = "standardAimingTransform", at = @At("HEAD"), cancellable = true)
     private static void gunfeel$hip(ItemStack stack, PoseStack pose, double sX, double sY, double sZ, double aX, double aY, double aZ, CallbackInfo ci) {
         if (!Config.enabled || GunFeel.current == null || GunFeel.currentAkimbo) return;
-        if (Config.hipX == 1F && Config.hipY == 1F && Config.hipZ == 1F) return;
+        float[] tilt = tilt();
+        if (Config.hipX == 1F && Config.hipY == 1F && Config.hipZ == 1F && tilt == null) return;
         float p = ItemGunBaseNT.prevAimingProgress + (ItemGunBaseNT.aimingProgress - ItemGunBaseNT.prevAimingProgress) * ItemRenderWeaponBase.interp;
         double hx = sX * Config.hipX, hy = sY * Config.hipY;
         double hz = sZ > 0 ? sZ * Config.hipZ : sZ;
         pose.translate(hx + (aX - hx) * p, hy + (aY - hy) * p, hz + (aZ - hz) * p);
+        // modelTilt (per gun): turned around the hip-fire position, fading out as the gun is aimed
+        if (tilt != null) {
+            float w = 1F - p;
+            pose.mulPose(com.mojang.math.Axis.YP.rotationDegrees(tilt[1] * w));
+            pose.mulPose(com.mojang.math.Axis.XP.rotationDegrees(tilt[0] * w));
+            pose.mulPose(com.mojang.math.Axis.ZP.rotationDegrees(tilt[2] * w));
+        }
         ci.cancel();
+    }
+
+    private static String tiltSource;
+    private static float[] tiltValue;
+
+    // modelTilt "pitch,yaw,roll" or null
+    private static float[] tilt() {
+        String src = Config.modelTilt;
+        if (!src.equals(tiltSource)) {
+            tiltSource = src;
+            tiltValue = null;
+            String[] t = src.split(",");
+            if (t.length == 3) {
+                try {
+                    tiltValue = new float[] {Float.parseFloat(t[0].trim()), Float.parseFloat(t[1].trim()), Float.parseFloat(t[2].trim())};
+                } catch (NumberFormatException e) {
+                    // malformed: no tilt
+                }
+            }
+        }
+        return tiltValue;
     }
 }

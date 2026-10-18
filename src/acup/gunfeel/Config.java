@@ -12,8 +12,14 @@ import net.neoforged.fml.loading.FMLPaths;
 // config/ntm-gunfeel.properties, re-read whenever the file changes so values can be tuned in game.
 public final class Config {
     public static boolean enabled = true;
+    public static boolean tracers = true, bulletHoles = true;
+    public static float tracerLength = 8F, tracerWidth = 0.02F, holeLife = 30F, holeSize = 0.28F, scorchSize = 0.9F;
+    public static int holeMax = 200;
+    // blocks whose holes follow only the hitbox, not the texture's see-through pixels ("*" = any letters)
+    public static String holeHitboxBlocks = "*glass*";
     // Hip-fire X position of the gun relative to NTM's: 1 = NTM default, 0 = screen centre.
     public static float hipX = 0.6F;
+    public static String modelTilt = "";
     // Hip-fire Y position relative to NTM's (1 = unchanged).
     public static float hipY = 1.0F;
     public static float hipZ = 0.75F;
@@ -69,6 +75,7 @@ public final class Config {
     public static String armRightCarry = "";
     public static String armRightCarryKeys = "";
     public static String armLeftCarry = "";
+    public static String armLeftCarryReload = "", armRightCarryReload = "";
     public static String armLeftCarryKeys = "";
     // arm thickness before armScale, the same on every gun (Maresleg / Old Classic); 0 = grows with the arm's length
     public static float armBaseRight = 1.70F;
@@ -98,7 +105,15 @@ public final class Config {
 
     private static final String HEADER = """
             NTM Gun Feel. Saved values are re-read while the game runs.
+            tracers: thin tracers in the NTM bullet's colours instead of NTM's wide ribbon (needs the mod on the server)
+            tracerLength, tracerWidth: tracer length and half width, blocks
+            bulletHoles: holes where bullets hit blocks; holeLife seconds, holeMax at most, holeSize blocks;
+              scorchSize: the soot mark of explosive / incendiary bullets instead of a hole, blocks
+              holes are cut to the hitbox and to the block's visible pixels; blocks drawn without a block model
+              (machines) get none. holeHitboxBlocks: block ids, comma separated, "*" = any letters, whose holes are
+              cut only to the hitbox (glass: its see-through pixels are still glass)
             hipX: gun X position in hip fire, 1 = NTM default, 0 = centre of the screen
+            modelTilt: "pitch,yaw,roll" degrees, the gun turned around its hip-fire position (none when aimed), empty = none
             hipY: gun Y position in hip fire, 1 = NTM default
             hipZ: gun distance in hip fire, 1 = NTM default, less = closer and bigger
             cameraScale: camera kick, degrees per unit of NTM recoil (0.55: lever shotgun ~5.5 deg like TaCZ M870)
@@ -145,6 +160,7 @@ public final class Config {
             armLeftKeys: the left hand goes around the part it holds during NTM animations, per animation:
               "RELOAD 0:-90 240:90 1250:90 1500:-90; INSPECT ..." = milliseconds:angle, angle around the part
               (-90 under, 0 the gun's left side, 90 on top, 180 right side); empty = the hand stays put
+            armRightCarryReload, armLeftCarryReload: used instead of armRightCarry / armLeftCarry during reloads, empty = the same
             armRightCarry, armLeftCarry: the hand carries something an NTM animation bus moves, "<part> <bus> <grab ms> x,y,z [dx,dy,dz]":
               the bus moves it within that part, the hand holds point x,y,z from side dx,dy,dz (default 0,0,-1 = behind;
               the side's length is the distance in half arm widths, 1 = the point on the hand's surface),
@@ -218,6 +234,11 @@ public final class Config {
         return new java.util.TreeSet<>(BUILTIN.stringPropertyNames());
     }
 
+    // the mod's own default, before the player's global file
+    public static String codeValue(String key) {
+        return BUILTIN.getProperty(key);
+    }
+
     public static String globalValue(String key) {
         return GLOBAL.getProperty(key, BUILTIN.getProperty(key));
     }
@@ -225,6 +246,16 @@ public final class Config {
     private static void apply(Properties p) {
         enabled = bool(p, "enabled", enabled);
         hipX = num(p, "hipX", hipX);
+        tracers = bool(p, "tracers", tracers);
+        bulletHoles = bool(p, "bulletHoles", bulletHoles);
+        tracerLength = num(p, "tracerLength", tracerLength);
+        tracerWidth = num(p, "tracerWidth", tracerWidth);
+        holeLife = num(p, "holeLife", holeLife);
+        holeSize = num(p, "holeSize", holeSize);
+        scorchSize = num(p, "scorchSize", scorchSize);
+        holeMax = Math.round(num(p, "holeMax", holeMax));
+        holeHitboxBlocks = p.getProperty("holeHitboxBlocks", holeHitboxBlocks).trim();
+        modelTilt = p.getProperty("modelTilt", modelTilt).trim();
         hipY = num(p, "hipY", hipY);
         hipZ = num(p, "hipZ", hipZ);
         cameraScale = num(p, "cameraScale", cameraScale);
@@ -269,6 +300,8 @@ public final class Config {
         armRightCarry = p.getProperty("armRightCarry", armRightCarry).trim();
         armRightCarryKeys = p.getProperty("armRightCarryKeys", armRightCarryKeys).trim();
         armLeftCarry = p.getProperty("armLeftCarry", armLeftCarry).trim();
+        armLeftCarryReload = p.getProperty("armLeftCarryReload", armLeftCarryReload).trim();
+        armRightCarryReload = p.getProperty("armRightCarryReload", armRightCarryReload).trim();
         armLeftCarryKeys = p.getProperty("armLeftCarryKeys", armLeftCarryKeys).trim();
         armBaseRight = num(p, "armBaseRight", armBaseRight);
         armBaseLeft = num(p, "armBaseLeft", armBaseLeft);
@@ -302,6 +335,16 @@ public final class Config {
         };
         p.setProperty("enabled", Boolean.toString(enabled));
         p.setProperty("hipX", Float.toString(hipX));
+        p.setProperty("tracers", Boolean.toString(tracers));
+        p.setProperty("bulletHoles", Boolean.toString(bulletHoles));
+        p.setProperty("tracerLength", Float.toString(tracerLength));
+        p.setProperty("tracerWidth", Float.toString(tracerWidth));
+        p.setProperty("holeLife", Float.toString(holeLife));
+        p.setProperty("holeSize", Float.toString(holeSize));
+        p.setProperty("scorchSize", Float.toString(scorchSize));
+        p.setProperty("holeMax", Integer.toString(holeMax));
+        p.setProperty("holeHitboxBlocks", holeHitboxBlocks);
+        p.setProperty("modelTilt", modelTilt);
         p.setProperty("hipY", Float.toString(hipY));
         p.setProperty("hipZ", Float.toString(hipZ));
         p.setProperty("cameraScale", Float.toString(cameraScale));
@@ -346,6 +389,8 @@ public final class Config {
         p.setProperty("armRightCarry", armRightCarry);
         p.setProperty("armRightCarryKeys", armRightCarryKeys);
         p.setProperty("armLeftCarry", armLeftCarry);
+        p.setProperty("armLeftCarryReload", armLeftCarryReload);
+        p.setProperty("armRightCarryReload", armRightCarryReload);
         p.setProperty("armLeftCarryKeys", armLeftCarryKeys);
         p.setProperty("armBaseRight", Float.toString(armBaseRight));
         p.setProperty("armBaseLeft", Float.toString(armBaseLeft));

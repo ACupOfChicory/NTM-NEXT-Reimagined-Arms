@@ -67,9 +67,17 @@ public final class Grips {
     }
 
     // settings overridden for this gun (without hand positions)
+    // A gun with sameAs takes the other gun's settings; its own entries (other than sameAs) win over them.
     public static Map<String, String> overrides(String gun) {
-        gun = canon(gun);
         Map<String, String> out = new TreeMap<>();
+        String target = canon(gun);
+        collect(target, out);
+        if (!target.equals(gun)) collect(gun, out);
+        out.remove("sameAs");
+        return out;
+    }
+
+    private static void collect(String gun, Map<String, String> out) {
         String prefix = gun + ".";
         for (Map.Entry<String, String> e : VALUES.entrySet()) {
             if (!e.getKey().startsWith(prefix)) continue;
@@ -77,7 +85,19 @@ public final class Grips {
             if (k.equals("right") || k.equals("left") || k.equals("rightAt") || k.equals("leftAt") || e.getValue().isEmpty()) continue;
             out.put(k, e.getValue());
         }
-        return out;
+    }
+
+    // this gun's value shipped in the jar (its own, else the sameAs gun's); null = none
+    public static String shipped(String gun, String key) {
+        String v = BUILTIN.get(gun + "." + key);
+        if (v == null || v.isEmpty()) v = BUILTIN.get(canon(gun) + "." + key);
+        return v == null || v.isEmpty() ? null : v;
+    }
+
+    // this gun's value from the player's file, "" = hides the shipped one; null = none
+    public static String own(String gun, String key) {
+        String v = USER.get(gun + "." + key);
+        return v != null ? v : USER.get(canon(gun) + "." + key);
     }
 
     public static void set(Identifier id, boolean right, float x, float y, float z) {
@@ -102,7 +122,8 @@ public final class Grips {
 
     // value null = back to the jar's value (or none)
     public static void put(String gun, String key, String value) {
-        if (!key.equals("sameAs")) gun = canon(gun);
+        // a setting the gun has of its own stays its own; anything else goes to the gun it is the same as
+        if (!key.equals("sameAs") && !VALUES.containsKey(gun + "." + key)) gun = canon(gun);
         String k = gun + "." + key;
         if (value == null || value.equals(BUILTIN.get(k))) USER.remove(k);
         else USER.put(k, value);

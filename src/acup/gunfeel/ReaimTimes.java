@@ -52,6 +52,37 @@ public final class ReaimTimes {
         }
     }
 
+    private static long lastPoll;
+    private static final Map<String, Float> NUMBERS = new java.util.HashMap<>();
+    private static long numbersStamp = Long.MIN_VALUE;
+
+    // a plain server setting (bulletSpeed = 1.6); read often, so the file is checked at most once a second
+    public static float number(String key, float def) {
+        long now = System.currentTimeMillis();
+        if (now - lastPoll > 1000L) {
+            lastPoll = now;
+            poll();
+        }
+        if (numbersStamp != stamp) {
+            numbersStamp = stamp;
+            NUMBERS.clear();
+        }
+        Float cached = NUMBERS.get(key);
+        if (cached != null) return cached;
+        String v = VALUES.get(key);
+        if (v == null) v = BUILTIN.get(key);
+        float out = def;
+        if (v != null) {
+            try {
+                out = Float.parseFloat(v.trim());
+            } catch (NumberFormatException e) {
+                // keep the default
+            }
+        }
+        NUMBERS.put(key, out);
+        return out;
+    }
+
     public static int ticks(String gun, String kind) {
         return Math.round(seconds(gun, kind) * 20F);
     }

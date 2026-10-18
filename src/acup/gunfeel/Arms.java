@@ -582,6 +582,12 @@ public final class Arms {
     // armRightCarry / armLeftCarry: "<part> <bus> <grab ms> x,y,z [dx,dy,dz]"
     private static Carry carry(int hand) {
         String src = hand == 0 ? Config.armRightCarry : Config.armLeftCarry;
+        // a reload may carry differently (armRightCarryReload / armLeftCarryReload)
+        String reload = hand == 0 ? Config.armRightCarryReload : Config.armLeftCarryReload;
+        if (!reload.isEmpty()) {
+            GunAnimation playing = HbmAnimations.getGunAnimation(0);
+            if (playing == GunAnimation.RELOAD || playing == GunAnimation.RELOAD_CYCLE || playing == GunAnimation.RELOAD_END) src = reload;
+        }
         if (!src.equals(carrySource[hand])) {
             carrySource[hand] = src;
             carry[hand] = NO_CARRY;

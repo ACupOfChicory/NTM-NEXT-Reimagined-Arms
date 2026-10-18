@@ -44,6 +44,17 @@ public final class GunFeel {
             if (Config.enabled && CameraRecoil.roll != 0F) e.setRoll(e.getRoll() + CameraRecoil.roll);
         });
         NeoForge.EVENT_BUS.addListener(RegisterClientCommandsEvent.class, e -> GripCommand.register(e.getDispatcher()));
+        NeoForge.EVENT_BUS.addListener(net.neoforged.neoforge.client.event.SubmitCustomGeometryEvent.class, Tracers::submit);
+        NeoForge.EVENT_BUS.addListener(net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingOut.class, e -> Tracers.clear());
+        NeoForge.EVENT_BUS.addListener(net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingIn.class, e -> MeshShapes.generate());
+        // NTM keeps the attack and pick keys off the world while a gun is held on them, but not the use key: aiming
+        // on the right button also opened doors, pressed buttons, placed the off-hand block
+        NeoForge.EVENT_BUS.addListener(net.neoforged.neoforge.client.event.InputEvent.InteractionKeyMappingTriggered.class, e -> {
+            if (e.isUseItem() && com.hbm.client.Keybinds.isGunHeld() && com.hbm.client.Keybinds.isGunKey(Minecraft.getInstance().options.keyUse)) {
+                e.setCanceled(true);
+                e.setSwingHand(false);
+            }
+        });
     }
 
     // The gun is held with both hands, so the off-hand item is not drawn (it stays in the slot).

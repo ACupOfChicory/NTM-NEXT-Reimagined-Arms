@@ -23,6 +23,7 @@ public final class GripCommand {
     public static void register(CommandDispatcher<CommandSourceStack> d) {
         d.register(Commands.literal("gunfeel")
                 .then(Commands.literal("set").then(Commands.argument("key", StringArgumentType.word()).suggests(GripCommand::keys)
+                        .executes(GripCommand::describe)
                         .then(Commands.argument("value", StringArgumentType.greedyString()).executes(c -> {
                             Identifier id = held(c);
                             String key = StringArgumentType.getString(c, "key");
@@ -49,6 +50,7 @@ public final class GripCommand {
                             return 1;
                         })))
                 .then(Commands.literal("settings").executes(GripCommand::settings))
+                .then(Commands.literal("meshdump").executes(c -> RenderedMesh.dump(c.getSource())))
                 .then(Commands.literal("grip")
                 .then(Commands.literal("show").executes(c -> show(c)))
                 .then(Commands.literal("reset").executes(c -> {
@@ -61,6 +63,39 @@ public final class GripCommand {
                 .then(hand("left", false))
                 .then(handAt("rightAt", true))
                 .then(handAt("leftAt", false))));
+    }
+
+    // /gunfeel set <key> with no value: what the held gun uses now and the defaults under it
+    private static int describe(CommandContext<CommandSourceStack> c) {
+        Identifier id = held(c);
+        String key = StringArgumentType.getString(c, "key");
+        if (id == null || !checkKey(c, key)) return 0;
+        String gun = id.toString();
+        String own = Grips.own(gun, key), shipped = Grips.shipped(gun, key);
+        String global = Config.globalValue(key), code = Config.codeValue(key);
+        String now, from;
+        if (own != null && !own.isEmpty()) {
+            now = own;
+            from = "твоя настройка этой пушки";
+        } else if (shipped != null && own == null) {
+            now = shipped;
+            from = "по умолчанию для этой пушки в моде";
+        } else {
+            now = global;
+            from = global != null && !global.equals(code) ? "твоя общая настройка" : "общее по умолчанию";
+        }
+        StringBuilder out = new StringBuilder(key).append(" (").append(gun).append(")\n");
+        out.append("  сейчас: ").append(show(now)).append("  — ").append(from).append('\n');
+        out.append("  по умолчанию для этой пушки: ").append(shipped != null ? shipped : "нет, берётся общее").append('\n');
+        out.append("  общее по умолчанию: ").append(show(code));
+        if (global != null && !global.equals(code)) out.append(" (у тебя в общем конфиге: ").append(show(global)).append(')');
+        String text = out.toString();
+        c.getSource().sendSuccess(() -> Component.literal(text), false);
+        return 1;
+    }
+
+    private static String show(String v) {
+        return v == null ? "?" : v.isEmpty() ? "(пусто)" : v;
     }
 
     private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> hand(String name, boolean right) {
