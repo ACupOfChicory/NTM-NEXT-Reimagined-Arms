@@ -393,6 +393,8 @@ public final class RenderedMesh {
             AABB r = reachOf(st);
             if (r == INSIDE && !near) continue;
             if (r != INSIDE && !r.move(x, y, z).intersects(box)) continue;
+            // only what a bullet can hit (it goes by collision): no holes on grass, flowers, crops, torches
+            if (r == INSIDE && st.getCollisionShape(level, at).isEmpty()) continue;
             BlockPos block = at.immutable();
             int before = out.size();
             parts.clear();
