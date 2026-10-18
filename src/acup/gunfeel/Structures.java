@@ -128,6 +128,8 @@ public final class Structures {
         if (core == null) return null;
         BlockState coreState = level.getBlockState(core);
         if (!atRest(level, core, coreState)) return null;
+        // the elevator's base layer (its platform at the bottom lies over the base) keeps NTM's hitbox
+        if (coreState.getBlock() instanceof BlockCargoElevator && pos.getY() == core.getY()) return null;
         String key = key(coreState, pos.getX() - core.getX(), pos.getY() - core.getY(), pos.getZ() - core.getZ());
         Rotation r = toNorth(coreState.getValue(BlockMultiblockCore.FACING));
         String world = key + "/" + r.ordinal();
