@@ -51,6 +51,13 @@ public final class GripCommand {
                         })))
                 .then(Commands.literal("settings").executes(GripCommand::settings))
                 .then(Commands.literal("meshdump").executes(c -> RenderedMesh.dump(c.getSource())))
+                .then(Commands.literal("holedebug").executes(c -> {
+                    Tracers.debugHoles = !Tracers.debugHoles;
+                    PassableClip.debug = Tracers.debugHoles;
+                    boolean on = Tracers.debugHoles;
+                    c.getSource().sendSuccess(() -> Component.literal(on ? "Отладка дырок включена: каждое попадание пишется в лог ([holedebug])" : "Отладка дырок выключена"), false);
+                    return 1;
+                }))
                 .then(Commands.literal("grip")
                 .then(Commands.literal("show").executes(c -> show(c)))
                 .then(Commands.literal("reset").executes(c -> {

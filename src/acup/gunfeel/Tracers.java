@@ -433,8 +433,29 @@ public final class Tracers {
         s.checked = t;
     }
 
+    // /gunfeel holedebug: every hit and how its hole was placed, to the log ("[holedebug]")
+    public static volatile boolean debugHoles;
+
+    static void dbg(String fmt, Object... args) {
+        if (debugHoles) GunFeel.LOGGER.info("[holedebug] " + fmt, args);
+    }
+
+    private static String v(Vec3 p) {
+        return String.format(java.util.Locale.ROOT, "(%.4f %.4f %.4f)", p.x, p.y, p.z);
+    }
+
+    private static String v(Vector3d p) {
+        return String.format(java.util.Locale.ROOT, "(%.4f %.4f %.4f)", p.x, p.y, p.z);
+    }
+
     private static void addHole(ClientLevel level, BlockHitResult hit, BulletConfig config, Vec3 dir) {
+        if (debugHoles) {
+            BlockState hs = level.getBlockState(hit.getBlockPos());
+            dbg("HIT {} {} face={} at={} inside={} dir={} shape={} structureCells={} hitboxOnly={}", hit.getBlockPos(), PassableClip.key(hs), hit.getDirection(),
+                    v(hit.getLocation()), hit.isInside(), v(dir), PassableClip.shape(hs) != null, Structures.cells(level, hit.getBlockPos(), hs) != null, hitboxOnly(hs));
+        }
         if (drawnHole(level, hit, config, dir)) return;
+        dbg("  drawnHole gave up: other paths");
         // a block met by its model's pixels (a door, a scaffold) with nothing found to put the decal on
         if (PassableClip.shape(level.getBlockState(hit.getBlockPos())) != null) {
             meshHole(level, hit, config, dir);
@@ -444,7 +465,7 @@ public final class Tracers {
         double boxFace = comp(hit.getLocation(), hit.getDirection().getAxis().ordinal());
         if (!hitboxOnly(level.getBlockState(hit.getBlockPos()))) {
             Vec3 onPixels = alongRay(level, hit, dir, new HashMap<>());
-            if (onPixels == null) return;
+            if (onPixels == null) { dbg("  no shown pixel along the ray (alongRay): no hole"); return; }
             hit = new BlockHitResult(onPixels, hit.getDirection(), hit.getBlockPos(), false);
         }
         BlockPos lightAt = hit.getBlockPos().relative(hit.getDirection());
@@ -457,7 +478,7 @@ public final class Tracers {
         double plane = Double.NaN;
         if (!hitboxOnly(level.getBlockState(hit.getBlockPos()))) {
             mask = mask(level, hit, size * 0.5F, rect);
-            if (mask == NO_PIXELS) return;
+            if (mask == NO_PIXELS) { dbg("  mask: no pixels around the hit: no hole"); return; }
             plane = mask.plane();
             boolean[] solid = mask.solid();
             boolean all = true;
@@ -604,6 +625,51 @@ public final class Tracers {
     // steeper ones up to 90 degrees unfolded into its plane about the line where their planes meet (over a block's
     // edge like over a folded sheet) when they reach that line. Faces hidden behind others towards the shooter are
     // left out. false = nothing drawn to put it on (the hitbox hole instead).
+    // every triangle the bullet's line crosses near the hit, and why it was or was not the one the hole goes on
+    private static void debugCandidates(List<RenderedMesh.Tri> tris, java.util.Set<RenderedMesh.Tri> plain, Vector3d o, Vector3d d, double reachTo,
+            long[] shape, BlockPos pos, boolean drawn, boolean reaches, RenderedMesh.Tri met, double best) {
+        int ber = 0, models = 0;
+        for (RenderedMesh.Tri t : tris) if (t.block() == null) ber++; else models++;
+        dbg("  tris: {} from renderers, {} from block models (plain {}), renderer tris in the hit block: {}, model reaching in: {}, ray from {} along {}, k range 0..{}",
+                ber, models, plain.size(), drawn, reaches, v(o), v(d), reachTo);
+        record C(double k, RenderedMesh.Tri t, String why) {
+        }
+        List<C> cs = new ArrayList<>();
+        for (RenderedMesh.Tri t : tris) {
+            double k = t.cross(o, d);
+            if (Double.isNaN(k) || k < -1.0 || k > 3.0) continue;
+            double from = !plain.contains(t) ? 0.0 : shape != null && pos.equals(t.block()) ? 0.89 : 0.99;
+            String why;
+            Vector3d pt = new Vector3d(d).mul(k).add(o);
+            double[] w = t.weights(pt, 1e-4);
+            String uv = "";
+            if (w != null) {
+                float u = (float) (w[0] * t.uv()[0] + w[1] * t.uv()[2] + w[2] * t.uv()[4]);
+                float vv = (float) (w[0] * t.uv()[1] + w[1] * t.uv()[3] + w[2] * t.uv()[5]);
+                uv = String.format(java.util.Locale.ROOT, " uv=(%.5f %.5f)", u, vv);
+            }
+            if (k > reachTo) why = "too far";
+            else if (k < from) why = "before the start (" + from + ")";
+            else if (t.oneSided() && (t.normal() == null || t.normal().dot(d) > 0)) why = "back face";
+            else if (w == null) why = "line misses it";
+            else if (!t.opaqueAt(w)) why = "clear pixel";
+            else why = t == met ? "CHOSEN" : "ok but farther";
+            cs.add(new C(k, t, why + uv));
+        }
+        cs.sort(java.util.Comparator.comparingDouble(C::k));
+        int n = 0;
+        for (C c : cs) {
+            if (n++ >= 40) break;
+            RenderedMesh.Tri t = c.t();
+            Vector3d nn = t.normal();
+            dbg(String.format(java.util.Locale.ROOT, "    k=%.4f %s | tex=%s oneSided=%s moving=%s block=%s part=%s n=%s corners=(%.3f %.3f %.3f)(%.3f %.3f %.3f)(%.3f %.3f %.3f)",
+                    c.k(), c.why(), RenderedMesh.texName(t.tex()), t.oneSided(), t.moving(), t.block(),
+                    t.anchor() == null ? "-" : t.anchor().key().code().getSimpleName() + "#" + t.anchor().key().n(), nn == null ? "-" : v(nn),
+                    t.p()[0], t.p()[1], t.p()[2], t.p()[3], t.p()[4], t.p()[5], t.p()[6], t.p()[7], t.p()[8]));
+        }
+        dbg("  {} crossing tris, chosen: {}", cs.size(), met == null ? "NONE" : String.format(java.util.Locale.ROOT, "k=%.4f", best));
+    }
+
     private static boolean drawnHole(ClientLevel level, BlockHitResult hit, BulletConfig config, Vec3 dir) {
         long started = System.nanoTime();
         BlockPos pos = hit.getBlockPos();
@@ -652,6 +718,7 @@ public final class Tracers {
             best = k;
             met = t;
         }
+        if (debugHoles) debugCandidates(tris, plain, o, d, reachTo, shape, pos, drawn, reaches[0], met, best);
         if (met == null) return drawn || reaches[0];
         Vector3d normal = met.normal();
         if (normal == null) return true;
@@ -682,7 +749,7 @@ public final class Tracers {
         // facing its own way
         Map<Object, Group> groups = new java.util.LinkedHashMap<>();
         double cs = 1.0 / 32;
-        int polyCount = 0;
+        int polyCount = 0, hiddenPieces = 0;
         for (Piece pc : pieces) {
             double[] cen = centroid(pc.poly());
             boolean shown = false;
@@ -690,7 +757,10 @@ public final class Tracers {
                 double[] sm = s == 0 ? cen : lerp(pc.poly().get(s - 1), cen, 0.2);
                 shown = !hidden(near, pc, sm);
             }
-            if (!shown) continue;
+            if (!shown) {
+                hiddenPieces++;
+                continue;
+            }
             RenderedMesh.Tri t = pc.tri();
             Object owner = t.anchor() != null ? List.of(t.anchor().be(), t.anchor().key()) : t.block() != null ? t.block() : "";
             Object key = List.of(owner, Math.round(pc.tn().x * 100), Math.round(pc.tn().y * 100), Math.round(pc.tn().z * 100), Math.round(pc.plane() * 200));
@@ -789,7 +859,11 @@ public final class Tracers {
             Follow follow = first.anchor() == null ? null : new Follow(first.anchor(), at, mesh, light);
             HOLES.addLast(new Hole(new Vec3(at.x, at.y, at.z), hit.getDirection(), turn, born, light, kind, size, null, null, Double.NaN, late, false, mesh,
                     front, on.immutable(), state, first.moving() && first.anchor() == null, follow, hitAt));
+            dbg("  hole group: {} polygons at {} on {} tex={} front={} late={} follows={} moving={}", g.polys().size(), v(at), on,
+                    RenderedMesh.texName(first.tex()), front, late, follow != null, first.moving());
         }
+        dbg("  hole made: at {} normal {}, {} tris near, {} pieces ({} hidden), {} groups, {} polygons", v(world), v(normal), near.size(), pieces.size(),
+                hiddenPieces, groups.size(), polyCount);
         trimHoles();
         long took = System.nanoTime() - started;
         if (took > 3_000_000L) GunFeel.LOGGER.info("Bullet hole on {} took {} ms: {} triangles near, {} pieces, {} polygons", level.getBlockState(pos), took / 1_000_000L, near.size(), pieces.size(), polyCount);

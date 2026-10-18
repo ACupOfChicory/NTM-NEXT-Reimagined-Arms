@@ -824,6 +824,15 @@ public final class RenderedMesh {
             // sliding blast door: its armoured window
             "hbm:textures/block/models/pheodoors/blast_door.png");
 
+    // a texture's name, for /gunfeel holedebug
+    public static String texName(Tex tex) {
+        if (tex == OPAQUE) return "OPAQUE(no texture read)";
+        if (tex == GLASS_TEX) return "GLASS";
+        for (var e : TEXTURES.entrySet()) if (e.getValue() == tex) return e.getKey().toString();
+        for (var e : SPRITES.entrySet()) if (e.getValue() == tex) return "sprite " + e.getKey().contents().name();
+        return tex.getClass().getSimpleName() + (tex.seeThrough() ? "(see-through)" : "");
+    }
+
     private static Tex texOf(RenderType type) {
         Identifier loc = textureOf(type);
         if (loc == null) return OPAQUE;

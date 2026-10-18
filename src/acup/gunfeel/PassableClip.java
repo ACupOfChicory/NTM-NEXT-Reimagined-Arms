@@ -51,13 +51,26 @@ public final class PassableClip extends ClipContext {
         return super.getBlockShape(state, level, pos);
     }
 
+    // /gunfeel holedebug: the client's steps through blocks, to the log
+    public static volatile boolean debug;
+
     // the first block that stops a bullet going from `from` to `to`
     public static BlockHitResult clip(Level level, Vec3 from, Vec3 to) {
+        BlockHitResult r = clip0(level, from, to);
+        if (debug && level.isClientSide() && r.getType() != HitResult.Type.MISS)
+            org.slf4j.LoggerFactory.getLogger("ntm-gunfeel").info("[holedebug] clip {} -> {} stops at {} {} {}", from, to, r.getBlockPos(), r.getDirection(), r.getLocation());
+        return r;
+    }
+
+    private static BlockHitResult clip0(Level level, Vec3 from, Vec3 to) {
         Set<BlockPos> skip = new HashSet<>();
         for (int i = 0; i < 16; i++) {
             BlockHitResult hit = level.clip(new PassableClip(from, to, skip));
             if (hit.getType() == HitResult.Type.MISS) return hit;
             BlockState state = level.getBlockState(hit.getBlockPos());
+            if (debug && level.isClientSide())
+                org.slf4j.LoggerFactory.getLogger("ntm-gunfeel").info("[holedebug]   step {}: {} {} face={} at={} inside={} shape={} cells={}", i, hit.getBlockPos(), key(state),
+                        hit.getDirection(), hit.getLocation(), hit.isInside(), shape(state) != null, Structures.cells(level, hit.getBlockPos(), state) != null);
             long[] vox = shape(state);
             long[] cells = vox == null ? Structures.cells(level, hit.getBlockPos(), state) : null;
             if (cells != null) {
