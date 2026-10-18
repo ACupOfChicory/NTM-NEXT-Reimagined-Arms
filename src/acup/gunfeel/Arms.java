@@ -396,6 +396,11 @@ public final class Arms {
                 submit(collector, light, arm, skin, new Matrix4f(CAMERA).mul(r.local), r.crop, right, slim, sleeveShown, sleeve);
                 continue;
             }
+            // armLeftHide / armRightHide (per gun): the hand is not drawn in these stretches of an animation
+            if (hidden(i)) {
+                if (debugArms) GunFeel.LOGGER.info("[armdebug] {} {} t={} hidden", right ? "R" : "L", HbmAnimations.getGunAnimation(0), fmt(animMillis()));
+                continue;
+            }
             // A hand goes from part to part during an animation (armLeftPath / armRightPath).
             float[] onPath = pathState(i, cameraInv);
             if (onPath != null) {
@@ -604,6 +609,45 @@ public final class Arms {
             arm(collector, light, arm, skin, slim, right, g0, path, gripF, bodyInCamera, down, center, spin, own,
                     drop, axisPoint, r, sleeveShown, sleeve);
         }
+    }
+
+    private static final String[] hideSource = new String[2];
+    @SuppressWarnings("unchecked")
+    private static final Map<String, float[]>[] hideKeys = new Map[] {Map.of(), Map.of()};
+
+    // "RELOAD 0-650; RELOAD_END 0-700" (ms from the animation's start, several ranges allowed): the hand hidden then
+    private static boolean hidden(int hand) {
+        String src = hand == 0 ? Config.armRightHide : Config.armLeftHide;
+        if (src.isEmpty()) return false;
+        if (!src.equals(hideSource[hand])) {
+            hideSource[hand] = src;
+            Map<String, float[]> out = new HashMap<>();
+            for (String anim : src.split(";")) {
+                String[] w = anim.trim().split("\\s+");
+                if (w.length < 2) continue;
+                List<Float> v = new ArrayList<>();
+                for (int j = 1; j < w.length; j++) {
+                    String[] ab = w[j].split("-");
+                    if (ab.length != 2) continue;
+                    try {
+                        float a = Float.parseFloat(ab[0]), b = Float.parseFloat(ab[1]);
+                        v.add(a);
+                        v.add(b);
+                    } catch (NumberFormatException e) {
+                        // skip
+                    }
+                }
+                float[] a = new float[v.size()];
+                for (int j = 0; j < a.length; j++) a[j] = v.get(j);
+                out.put(w[0].toUpperCase(java.util.Locale.ROOT), a);
+            }
+            hideKeys[hand] = out;
+        }
+        float[] r = forAnimation(hideKeys[hand]);
+        if (r == null) return false;
+        float t = animMillis();
+        for (int j = 0; j + 1 < r.length; j += 2) if (t >= r[j] && t < r[j + 1]) return true;
+        return false;
     }
 
     // /gunfeel armdebug: every frame, how each arm was placed, to the log ("[armdebug]")
@@ -1176,17 +1220,27 @@ public final class Arms {
                 // armSlideNearest (per gun): the first point from the grip on that the arm reaches, stepping along the
                 // gun; halving the whole stretch could land far from the grip when the distance is not monotonic
                 // (Henry being lifted: the right hand jumped down the stock in one frame)
-                float prev = hi, found = lo;
+                // none reachable (the lifted Henry: the stock is no nearer the shoulder): the point nearest it, no halving
+                float prev = hi, found = Float.NaN, nearest = hi, nearestD = Float.MAX_VALUE;
                 for (int k = 1; k <= 64; k++) {
                     float f = hi + (lo - hi) * k / 64F;
-                    if (onPath(path, f, bodyInCamera, off).distance(shoulder) <= limit) {
+                    float d = onPath(path, f, bodyInCamera, off).distance(shoulder);
+                    if (d <= limit) {
                         found = f;
                         break;
                     }
+                    if (d < nearestD) {
+                        nearestD = d;
+                        nearest = f;
+                    }
                     prev = f;
                 }
-                lo = found;
-                hi = prev;
+                if (Float.isNaN(found)) {
+                    lo = hi = nearest;
+                } else {
+                    lo = found;
+                    hi = prev;
+                }
             }
             for (int k = 0; k < 16; k++) {
                 float mid = (lo + hi) * 0.5F;
