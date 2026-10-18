@@ -608,6 +608,7 @@ public final class Tracers {
     // in that triangle's plane, cut to the drawn triangles in the same plane and to their pixels. false = no renderer
     // draws on this block: the usual holes.
     private static boolean drawnHole(ClientLevel level, BlockHitResult hit, BulletConfig config, Vec3 dir) {
+        long started = System.nanoTime();
         BlockPos pos = hit.getBlockPos();
         AABB cell = new AABB(pos);
         AABB around = cell.inflate(1.0);
@@ -653,60 +654,224 @@ public final class Tracers {
         double half = size * 0.5;
         Vector3d ref = Math.abs(normal.y) < 0.9 ? new Vector3d(0, 1, 0) : new Vector3d(1, 0, 0);
         Vector3d t1 = new Vector3d(normal).cross(ref).normalize(), t2 = new Vector3d(normal).cross(t1).normalize();
-        AABB reach = new AABB(world.x, world.y, world.z, world.x, world.y, world.z).inflate(half * 1.5);
-        List<double[]> polys = new ArrayList<>();
-        int grid = Math.max(1, (int) Math.ceil(2 * half * 32));
-        double cs = 2 * half / grid;
-        Vector3d origin = new Vector3d(pos.getX(), pos.getY(), pos.getZ());
-        // the drawn triangles in the hole's plane
-        List<RenderedMesh.Tri> same = new ArrayList<>();
-        boolean clear = false;
+        double depth = Math.max(half, 0.05);
+        AABB reach = new AABB(world.x, world.y, world.z, world.x, world.y, world.z).inflate(Math.max(half, depth) * 1.5);
+        List<Piece> pieces = new ArrayList<>();
+        Vector3d[] frame = {world, t1, t2, normal};
         for (RenderedMesh.Tri t : tris) {
             if (!t.meets(reach)) continue;
             Vector3d tn = t.normal();
-            if (tn == null || Math.abs(tn.dot(normal)) < 0.999) continue;
-            if (Math.abs(t.corner(0).sub(world).dot(normal)) > 2e-3) continue;
-            same.add(t);
-            clear |= t.tex().seeThrough();
-        }
-        if (!clear) {
-            for (RenderedMesh.Tri t : same) {
-                List<Vector3d> outline = List.of(t.corner(0).sub(origin), t.corner(1).sub(origin), t.corner(2).sub(origin));
-                addPoly(polys, clip(square(at, t1, t2, -half, half, -half, half), outline, normal), at, t1, t2, half, turn);
+            if (tn == null) continue;
+            double f = tn.dot(normal);
+            if (!t.oneSided() && f < 0) {
+                tn.negate();
+                f = -f;
             }
-        } else {
-            // cell by cell: shown or not is decided once for the whole plane, by the triangle under the cell (not
-            // per triangle: a cell on the seam of two would be lost from both, a jagged edge along the diagonal),
-            // then the cell is cut to each triangle it lies on
-            for (int i = 0; i < grid; i++) for (int j = 0; j < grid; j++) {
-                double cx = -half + (i + 0.5) * cs, cy = -half + (j + 0.5) * cs;
-                if (!shownAt(same, world, t1, t2, cx, cy, cs)) continue;
-                List<Vector3d> sq = square(at, t1, t2, cx - cs / 2, cx + cs / 2, cy - cs / 2, cy + cs / 2);
-                for (RenderedMesh.Tri t : same) {
-                    List<Vector3d> outline = List.of(t.corner(0).sub(origin), t.corner(1).sub(origin), t.corner(2).sub(origin));
-                    addPoly(polys, clip(sq, outline, normal), at, t1, t2, half, turn);
+            if (f < DECAL_COS) continue;
+            List<double[]> poly = new ArrayList<>(3);
+            for (int i = 0; i < 3; i++) poly.add(local(t.corner(i), world, t1, t2, normal));
+            double[] c0 = poly.get(0);
+            double pa = tn.dot(t1), pb = tn.dot(t2);
+            double[] plane = {pa, pb, f, pa * c0[0] + pb * c0[1] + f * c0[2]};
+            poly = cut(poly, 0, -half, true);
+            poly = cut(poly, 0, half, false);
+            poly = cut(poly, 1, -half, true);
+            poly = cut(poly, 1, half, false);
+            poly = cut(poly, 2, -depth, true);
+            poly = cut(poly, 2, depth, false);
+            if (poly.size() >= 3) pieces.add(new Piece(t, poly, plane, box2(poly), frame));
+        }
+        // grouped by the part each piece is on: a hole over a leaf and its frame is two holes, each going with its own
+        Map<Object, List<double[]>> groups = new java.util.LinkedHashMap<>();
+        Map<Object, RenderedMesh.Tri> firstOf = new HashMap<>();
+        double cs = 1.0 / 32;
+        int polyCount = 0;
+        for (Piece pc : pieces) {
+            int shown = 0;
+            double[] cen = centroid(pc.poly());
+            List<double[]> samples = new ArrayList<>();
+            samples.add(cen);
+            for (double[] v : pc.poly()) samples.add(new double[] {v[0] + (cen[0] - v[0]) * 0.2, v[1] + (cen[1] - v[1]) * 0.2});
+            for (double[] sm : samples) {
+                if (!hidden(pieces, pc, sm[0], sm[1])) shown++;
+            }
+            if (shown == 0) continue;
+            Object key = pc.tri().anchor() == null ? "" : List.of(pc.tri().anchor().be(), pc.tri().anchor().key());
+            List<double[]> polys = groups.computeIfAbsent(key, k -> new ArrayList<>());
+            firstOf.putIfAbsent(key, pc.tri());
+            int before = polys.size();
+            if (!pc.tri().tex().seeThrough()) {
+                addPoly(polys, lift(pc.poly(), at, t1, t2, normal), at, t1, t2, half, turn);
+            } else {
+                // see-through pixels: rows of shown cells (1/32 block, on the hole's grid), alike rows merged
+                int i0 = (int) Math.floor((pc.box()[0] + half) / cs), i1 = (int) Math.ceil((pc.box()[1] + half) / cs);
+                int j0 = (int) Math.floor((pc.box()[2] + half) / cs), j1 = (int) Math.ceil((pc.box()[3] + half) / cs);
+                boolean[][] on = new boolean[j1 - j0][i1 - i0];
+                boolean all = true;
+                for (int j = j0; j < j1; j++) for (int i = i0; i < i1; i++) {
+                    boolean v = cellShown(pc, -half + (i + 0.5) * cs, -half + (j + 0.5) * cs, cs, world, t1, t2, normal);
+                    on[j - j0][i - i0] = v;
+                    all &= v;
+                }
+                if (all) {
+                    addPoly(polys, lift(pc.poly(), at, t1, t2, normal), at, t1, t2, half, turn);
+                } else {
+                    int rowStart = j0;
+                    for (int j = j0; j <= j1; j++) {
+                        boolean same = j < j1 && j > rowStart && java.util.Arrays.equals(on[j - j0], on[rowStart - j0]);
+                        if (same) continue;
+                        if (j > rowStart) {
+                            boolean[] row = on[rowStart - j0];
+                            for (int i = 0; i < row.length; i++) {
+                                if (!row[i]) continue;
+                                int e = i;
+                                while (e + 1 < row.length && row[e + 1]) e++;
+                                double x0 = -half + (i0 + i) * cs, x1 = -half + (i0 + e + 1) * cs;
+                                double y0 = -half + rowStart * cs, y1 = -half + j * cs;
+                                List<double[]> r = cut(cut(cut(cut(pc.poly(), 0, x0, true), 0, x1, false), 1, y0, true), 1, y1, false);
+                                if (r.size() >= 3) addPoly(polys, lift(r, at, t1, t2, normal), at, t1, t2, half, turn);
+                                i = e;
+                            }
+                        }
+                        rowStart = j;
+                    }
                 }
             }
-        }
-        if (polys.isEmpty()) return true;
-        int count = 3;
-        for (double[] pl : polys) count += pl.length + 1;
-        float[] mesh = new float[count];
-        mesh[0] = (float) normal.x;
-        mesh[1] = (float) normal.y;
-        mesh[2] = (float) normal.z;
-        int k = 3;
-        for (double[] pl : polys) {
-            mesh[k++] = pl.length / 5;
-            for (double v : pl) mesh[k++] = (float) v;
+            polyCount += polys.size() - before;
         }
         BlockPos lightAt = BlockPos.containing(world.x + normal.x * 0.05, world.y + normal.y * 0.05, world.z + normal.z * 0.05);
         int light = LightCoordsUtil.getLightCoords(level, lightAt);
-        Follow follow = met.anchor() == null ? null : new Follow(met.anchor(), world, mesh, light);
-        HOLES.addLast(new Hole(new Vec3(world.x, world.y, world.z), hit.getDirection(), turn, System.nanoTime(), light, kind, size, null, null, Double.NaN, false, false, mesh,
-                met.oneSided(), pos.immutable(), level.getBlockState(pos), met.moving(), follow));
+        for (var g : groups.entrySet()) {
+            List<double[]> polys = g.getValue();
+            if (polys.isEmpty()) continue;
+            int count = 3;
+            for (double[] pl : polys) count += pl.length + 1;
+            float[] mesh = new float[count];
+            mesh[0] = (float) normal.x;
+            mesh[1] = (float) normal.y;
+            mesh[2] = (float) normal.z;
+            int k = 3;
+            for (double[] pl : polys) {
+                mesh[k++] = pl.length / 5;
+                for (double v : pl) mesh[k++] = (float) v;
+            }
+            RenderedMesh.Tri first = firstOf.get(g.getKey());
+            Follow follow = first.anchor() == null ? null : new Follow(first.anchor(), world, mesh, light);
+            HOLES.addLast(new Hole(new Vec3(world.x, world.y, world.z), hit.getDirection(), turn, System.nanoTime(), light, kind, size, null, null, Double.NaN, false, false, mesh,
+                    met.oneSided(), pos.immutable(), level.getBlockState(pos), first.moving(), follow));
+        }
+        long took = System.nanoTime() - started;
+        if (took > 3_000_000L) GunFeel.LOGGER.info("Bullet hole on {} took {} ms: {} triangles near, {} pieces, {} polygons", level.getBlockState(pos), took / 1_000_000L, tris.size(), pieces.size(), polyCount);
         while (HOLES.size() > Math.max(1, Config.holeMax)) HOLES.removeFirst();
         return true;
+    }
+
+    // ---- the projected hole (a decal): the hole's square pushed along its normal through a slab as deep as it is
+    // wide; every drawn face in it turned less than 60 degrees from the hit face gets its part. Positions here are
+    // u, v on the hole's two axes and w along its normal (towards the shooter), from the hit point.
+
+    private static final double DECAL_COS = 0.5;
+
+    // a triangle's part in the slab: its polygon, its plane a u + b v + c w = e, its u, v box
+    private record Piece(RenderedMesh.Tri tri, List<double[]> poly, double[] plane, double[] box, Vector3d[] frame) {
+        double w(double u, double v) {
+            return (plane[3] - plane[0] * u - plane[1] * v) / plane[2];
+        }
+
+        // in the world (frame = hit point, t1, t2, normal)
+        Vector3d pointAt(double u, double v) {
+            return new Vector3d(frame[0]).fma(u, frame[1]).fma(v, frame[2]).fma(w(u, v), frame[3]);
+        }
+
+        boolean covers(double u, double v) {
+            if (u < box[0] || u > box[1] || v < box[2] || v > box[3]) return false;
+            int sign = 0;
+            for (int i = 0; i < poly.size(); i++) {
+                double[] a = poly.get(i), b = poly.get((i + 1) % poly.size());
+                double cr = (b[0] - a[0]) * (v - a[1]) - (b[1] - a[1]) * (u - a[0]);
+                if (Math.abs(cr) < 1e-9) continue;
+                int sg = cr > 0 ? 1 : -1;
+                if (sign == 0) sign = sg;
+                else if (sg != sign) return false;
+            }
+            return true;
+        }
+    }
+
+    private static double[] local(Vector3d p, Vector3d world, Vector3d t1, Vector3d t2, Vector3d n) {
+        Vector3d r = new Vector3d(p).sub(world);
+        return new double[] {r.dot(t1), r.dot(t2), r.dot(n)};
+    }
+
+    // the polygon's part on one side of a plane across axis ax (keep >= value when above)
+    private static List<double[]> cut(List<double[]> poly, int ax, double value, boolean above) {
+        List<double[]> out = new ArrayList<>(poly.size() + 2);
+        for (int i = 0; i < poly.size(); i++) {
+            double[] a = poly.get(i), b = poly.get((i + 1) % poly.size());
+            double da = above ? a[ax] - value : value - a[ax], db = above ? b[ax] - value : value - b[ax];
+            if (da >= 0) out.add(a);
+            if ((da >= 0) != (db >= 0)) {
+                double t = da / (da - db);
+                out.add(new double[] {a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t});
+            }
+        }
+        return out;
+    }
+
+    private static double[] box2(List<double[]> poly) {
+        double[] b = {Double.MAX_VALUE, -Double.MAX_VALUE, Double.MAX_VALUE, -Double.MAX_VALUE};
+        for (double[] v : poly) {
+            b[0] = Math.min(b[0], v[0]);
+            b[1] = Math.max(b[1], v[0]);
+            b[2] = Math.min(b[2], v[1]);
+            b[3] = Math.max(b[3], v[1]);
+        }
+        return b;
+    }
+
+    private static double[] centroid(List<double[]> poly) {
+        double u = 0, v = 0;
+        for (double[] p : poly) {
+            u += p[0];
+            v += p[1];
+        }
+        return new double[] {u / poly.size(), v / poly.size()};
+    }
+
+    // another piece's shown pixel is in front of this one there (nearer the shooter)
+    private static boolean hidden(List<Piece> pieces, Piece self, double u, double v) {
+        double w = self.w(u, v);
+        for (Piece o : pieces) {
+            if (o == self || !o.covers(u, v)) continue;
+            double ow = o.w(u, v);
+            if (ow <= w + 4e-3) continue;
+            if (o.tri().tex().seeThrough()) {
+                double[] wt = o.tri().weights(o.pointAt(u, v), 1e-4);
+                if (wt != null && !o.tri().opaqueAt(wt)) continue;
+            }
+            return true;
+        }
+        return false;
+    }
+
+    // a cell is shown where the piece shows a pixel under its centre (or under a point of it on the piece); a cell
+    // off the piece altogether counts as shown (it is cut to the piece anyway)
+    private static boolean cellShown(Piece pc, double cx, double cy, double cs, Vector3d world, Vector3d t1, Vector3d t2, Vector3d n) {
+        double[][] at = {{0, 0}, {-0.3, -0.3}, {0.3, -0.3}, {0.3, 0.3}, {-0.3, 0.3}};
+        for (double[] k : at) {
+            double u = cx + k[0] * cs, v = cy + k[1] * cs;
+            if (!pc.covers(u, v)) continue;
+            double[] wt = pc.tri().weights(pc.pointAt(u, v), 1e-4);
+            return wt == null || pc.tri().opaqueAt(wt);
+        }
+        return true;
+    }
+
+    // u, v, w back to positions relative to the block
+    private static List<Vector3d> lift(List<double[]> poly, Vector3d at, Vector3d t1, Vector3d t2, Vector3d n) {
+        List<Vector3d> out = new ArrayList<>(poly.size());
+        for (double[] p : poly) out.add(new Vector3d(at).fma(p[0], t1).fma(p[1], t2).fma(p[2], n));
+        return out;
     }
 
     // The hole's face lies on the outside of the block's hitbox (a door, a trapdoor, a lantern): seen only from in
