@@ -22,6 +22,9 @@ import net.neoforged.neoforge.client.event.RegisterRenderPipelinesEvent;
 // of the face it lies on. Holes on glass (glass blocks, a door's clear window) are drawn "late", after the
 // translucent terrain, so the glass behind them is already there; then their solid middles go once more into the
 // depth only (DEPTH pipelines), so clouds and rain drawn after stay behind them.
+// Not sorted by distance: holes overlap in one plane, and sorting their triangles by distance flips which hole's soft
+// edge lies on top as the camera turns (patches of other shades along the triangles). They are drawn in the order
+// they were made, a newer hole over an older one.
 public final class HoleRender {
     public static final RenderPipeline PIPELINE = pipeline("pipeline/bullet_hole", false);
     // one-sided: holes on a full cube (copper grate), seen only from outside like the cube's own faces; from inside,
@@ -71,7 +74,6 @@ public final class HoleRender {
                     .withTexture("Sampler0", texture)
                     .useLightmap()
                     .useOverlay()
-                    .sortOnUpload()
                     .createRenderSetup();
             RenderType type = create(late ? "ntmgunfeel_bullet_hole_late" : "ntmgunfeel_bullet_hole", setup);
             if (late) LATE_TYPES.add(type);
