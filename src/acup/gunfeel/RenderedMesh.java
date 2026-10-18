@@ -87,7 +87,8 @@ public final class RenderedMesh {
     // a drawn triangle: corners in world space, their texture coordinates, its texture; oneSided = drawn with back
     // faces culled; moving = drawn by a renderer (may move: a door's leaf), not a block model; anchor = the part of
     // the renderer it belongs to and that part's pose then (null: a block model, or a part that can not be followed)
-    public record Tri(double[] p, float[] uv, Tex tex, boolean oneSided, boolean moving, @Nullable Anchor anchor) {
+    // block = the block whose model it is (null: drawn by a renderer)
+    public record Tri(double[] p, float[] uv, Tex tex, boolean oneSided, boolean moving, @Nullable Anchor anchor, @Nullable BlockPos block) {
         public Vector3d corner(int i) {
             return new Vector3d(p[i * 3], p[i * 3 + 1], p[i * 3 + 2]);
         }
@@ -371,37 +372,51 @@ public final class RenderedMesh {
         });
     }
 
-    // The block model triangles in the box: the model of the block at `own`, and those of blocks around whose model
-    // reaches out of their block into the box. reaches[0] is set when one of the latter meets `cell`. The triangles of
-    // `own`'s model when it stays in its block go into `plain` too.
+    // The block model triangles in the box: the models of the blocks in it (faces a neighbour hides left out, as the
+    // game draws them), and those of blocks around whose model reaches out of their block into the box. reaches[0] is
+    // set when one of the latter meets `cell`. The triangles of models that stay in their block go into `plain` too.
     public static List<Tri> models(ClientLevel level, AABB box, BlockPos own, AABB cell, boolean[] reaches, java.util.Set<Tri> plain) {
         List<Tri> out = new ArrayList<>();
         BlockPos.MutableBlockPos at = new BlockPos.MutableBlockPos();
-        int x0 = Mth.floor(box.minX) - MODEL_REACH, x1 = Mth.floor(box.maxX) + MODEL_REACH;
-        int y0 = Math.max(level.getMinY(), Mth.floor(box.minY) - MODEL_REACH), y1 = Math.min(level.getMaxY(), Mth.floor(box.maxY) + MODEL_REACH);
-        int z0 = Mth.floor(box.minZ) - MODEL_REACH, z1 = Mth.floor(box.maxZ) + MODEL_REACH;
+        int bx0 = Mth.floor(box.minX), bx1 = Mth.ceil(box.maxX) - 1, by0 = Mth.floor(box.minY), by1 = Mth.ceil(box.maxY) - 1;
+        int bz0 = Mth.floor(box.minZ), bz1 = Mth.ceil(box.maxZ) - 1;
+        int x0 = bx0 - MODEL_REACH, x1 = bx1 + MODEL_REACH;
+        int y0 = Math.max(level.getMinY(), by0 - MODEL_REACH), y1 = Math.min(level.getMaxY(), by1 + MODEL_REACH);
+        int z0 = bz0 - MODEL_REACH, z1 = bz1 + MODEL_REACH;
+        List<BlockStateModelPart> parts = new ArrayList<>();
+        net.minecraft.util.RandomSource random = net.minecraft.util.RandomSource.create();
         for (int x = x0; x <= x1; x++) for (int y = y0; y <= y1; y++) for (int z = z0; z <= z1; z++) {
+            boolean near = x >= bx0 && x <= bx1 && y >= by0 && y <= by1 && z >= bz0 && z <= bz1;
             at.set(x, y, z);
             var st = level.getBlockState(at);
             if (st.getRenderShape() != net.minecraft.world.level.block.RenderShape.MODEL) continue;
-            boolean self = at.equals(own);
             AABB r = reachOf(st);
-            if (r == INSIDE && !self) continue;
+            if (r == INSIDE && !near) continue;
             if (r != INSIDE && !r.move(x, y, z).intersects(box)) continue;
+            BlockPos block = at.immutable();
             int before = out.size();
-            for (BakedQuad q : MeshShapes.quads(st)) {
-                double[] p = new double[12];
-                float[] uv = new float[8];
-                for (int i = 0; i < 4; i++) {
-                    p[i * 3] = x + q.position(i).x();
-                    p[i * 3 + 1] = y + q.position(i).y();
-                    p[i * 3 + 2] = z + q.position(i).z();
-                    uv[i * 2] = UVPair.unpackU(q.packedUV(i));
-                    uv[i * 2 + 1] = UVPair.unpackV(q.packedUV(i));
+            parts.clear();
+            random.setSeed(st.getSeed(block));
+            Minecraft.getInstance().getModelManager().getBlockStateModelSet().get(st).collectParts(random, parts);
+            for (BlockStateModelPart part : parts) {
+                for (int side = 0; side <= 6; side++) {
+                    Direction dir = side < 6 ? Direction.values()[side] : null;
+                    if (dir != null && !net.minecraft.world.level.block.Block.shouldRenderFace(st, level.getBlockState(block.relative(dir)), dir)) continue;
+                    for (BakedQuad q : part.getQuads(dir)) {
+                        double[] p = new double[12];
+                        float[] uv = new float[8];
+                        for (int i = 0; i < 4; i++) {
+                            p[i * 3] = x + q.position(i).x();
+                            p[i * 3 + 1] = y + q.position(i).y();
+                            p[i * 3 + 2] = z + q.position(i).z();
+                            uv[i * 2] = UVPair.unpackU(q.packedUV(i));
+                            uv[i * 2 + 1] = UVPair.unpackV(q.packedUV(i));
+                        }
+                        quad(out, p, uv, atlasSprite(q.materialInfo().sprite()), true, false, block);
+                    }
                 }
-                quad(out, p, uv, atlasSprite(q.materialInfo().sprite()), true, false);
             }
-            if (self && r == INSIDE) plain.addAll(out.subList(before, out.size()));
+            if (r == INSIDE) plain.addAll(out.subList(before, out.size()));
             if (r != INSIDE && !reaches[0]) for (int i = before; i < out.size(); i++) if (out.get(i).meets(cell)) {
                 reaches[0] = true;
                 break;
@@ -608,8 +623,12 @@ public final class RenderedMesh {
     }
 
     private static void quad(List<Tri> out, double[] p, float[] uv, Tex tex, boolean cull, boolean moving) {
-        out.add(new Tri(new double[] {p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8]}, new float[] {uv[0], uv[1], uv[2], uv[3], uv[4], uv[5]}, tex, cull, moving, null));
-        out.add(new Tri(new double[] {p[0], p[1], p[2], p[6], p[7], p[8], p[9], p[10], p[11]}, new float[] {uv[0], uv[1], uv[4], uv[5], uv[6], uv[7]}, tex, cull, moving, null));
+        quad(out, p, uv, tex, cull, moving, null);
+    }
+
+    private static void quad(List<Tri> out, double[] p, float[] uv, Tex tex, boolean cull, boolean moving, @Nullable BlockPos block) {
+        out.add(new Tri(new double[] {p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8]}, new float[] {uv[0], uv[1], uv[2], uv[3], uv[4], uv[5]}, tex, cull, moving, null, block));
+        out.add(new Tri(new double[] {p[0], p[1], p[2], p[6], p[7], p[8], p[9], p[10], p[11]}, new float[] {uv[0], uv[1], uv[4], uv[5], uv[6], uv[7]}, tex, cull, moving, null, block));
     }
 
     // collects the vertices a renderer writes (position, texture coordinates), then cuts them into triangles
@@ -697,7 +716,7 @@ public final class RenderedMesh {
                 uv[i * 2] = v[k + 3];
                 uv[i * 2 + 1] = v[k + 4];
             }
-            out.add(new Tri(p, uv, tex, cull, true, anchor));
+            out.add(new Tri(p, uv, tex, cull, true, anchor, null));
         }
 
         void finish() {
