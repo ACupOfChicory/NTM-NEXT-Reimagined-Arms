@@ -820,7 +820,9 @@ public final class RenderedMesh {
     }
 
     // alpha 0 that still reads as glass: holes stay on it (QE sliding door window)
-    private static final java.util.Set<String> GLASS = java.util.Set.of("hbm:textures/block/models/pheodoors/sliding_door.png");
+    private static final java.util.Set<String> GLASS = java.util.Set.of("hbm:textures/block/models/pheodoors/sliding_door.png",
+            // sliding blast door: its armoured window
+            "hbm:textures/block/models/pheodoors/blast_door.png");
 
     private static Tex texOf(RenderType type) {
         Identifier loc = textureOf(type);

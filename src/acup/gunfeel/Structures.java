@@ -106,7 +106,10 @@ public final class Structures {
     public static String key(BlockState coreState, int dx, int dy, int dz) {
         Rotation r = toNorth(coreState.getValue(BlockMultiblockCore.FACING));
         BlockPos o = new BlockPos(dx, layer(coreState, dy), dz).rotate(r);
-        return PassableClip.key(coreState.setValue(BlockMultiblockCore.FACING, Direction.NORTH)) + "@" + o.getX() + "," + o.getY() + "," + o.getZ();
+        BlockState north = coreState.setValue(BlockMultiblockCore.FACING, Direction.NORTH);
+        // a door's skins are one model with other colours: skin 0 stands for all
+        if (north.hasProperty(BlockDoorGeneric.SKIN)) north = north.setValue(BlockDoorGeneric.SKIN, 0);
+        return PassableClip.key(north) + "@" + o.getX() + "," + o.getY() + "," + o.getZ();
     }
 
     // a cell (x, z) of a block turned by r, as BlockPos.rotate turns the block: {x, z}
