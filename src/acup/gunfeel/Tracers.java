@@ -434,11 +434,12 @@ public final class Tracers {
     }
 
     private static void addHole(ClientLevel level, BlockHitResult hit, BulletConfig config, Vec3 dir) {
+        if (drawnHole(level, hit, config, dir)) return;
+        // a block met by its model's pixels (a door, a scaffold) with nothing found to put the decal on
         if (PassableClip.shape(level.getBlockState(hit.getBlockPos())) != null) {
             meshHole(level, hit, config, dir);
             return;
         }
-        if (drawnHole(level, hit, config, dir)) return;
         // where the ray met the hitbox, on the face's axis
         double boxFace = comp(hit.getLocation(), hit.getDirection().getAxis().ordinal());
         if (!hitboxOnly(level.getBlockState(hit.getBlockPos()))) {
@@ -596,10 +597,11 @@ public final class Tracers {
 
     // A hole as a decal over what is drawn there: block models (this block and its neighbours, without the faces a
     // neighbour hides) and what renderers draw (NTM's machines and doors). It goes on the first shown pixel the
-    // bullet's line meets; its square lies in that face's plane, and every drawn face near it turned up to 90 degrees
-    // from that face gets its part, unfolded into the hit face's plane about the line where their planes meet (over a
-    // block's edge like over a folded sheet). Faces hidden behind others towards the shooter are left out. false =
-    // nothing drawn to put it on (the hitbox hole instead).
+    // bullet's line meets; its square lies in that face's plane. Every drawn face near it gets its part: faces turned
+    // up to 60 degrees from it projected along its normal (as the shooter sees them: steps, bevels, bars in front),
+    // steeper ones up to 90 degrees unfolded into its plane about the line where their planes meet (over a block's
+    // edge like over a folded sheet) when they reach that line. Faces hidden behind others towards the shooter are
+    // left out. false = nothing drawn to put it on (the hitbox hole instead).
     private static boolean drawnHole(ClientLevel level, BlockHitResult hit, BulletConfig config, Vec3 dir) {
         long started = System.nanoTime();
         BlockPos pos = hit.getBlockPos();
@@ -625,13 +627,19 @@ public final class Tracers {
         }
         Vector3d d = new Vector3d(dir.x, dir.y, dir.z);
         // from a block before the hit (a renderer's model may stand out of its hitbox), but block models only from the
-        // hit on (the bullet went through those before it)
+        // hit on (the bullet went through those before it). A block met by its model's pixels (a door, a scaffold) was
+        // met on a 1/16 voxel: its own faces from a voxel before, and nothing much further (a door stops the bullet
+        // where it came in: never its far inner face, seen through its window)
+        BlockState hitState = level.getBlockState(pos);
+        long[] shape = PassableClip.shape(hitState);
+        double reachTo = shape == null ? 2.0 : PassableClip.shell(shape) ? 1.1 : 1.15;
         Vector3d o = new Vector3d(hit.getLocation().x, hit.getLocation().y, hit.getLocation().z).sub(new Vector3d(d));
         double best = Double.POSITIVE_INFINITY;
         RenderedMesh.Tri met = null;
         for (RenderedMesh.Tri t : tris) {
             double k = t.cross(o, d);
-            if (Double.isNaN(k) || k > 2.0 || k >= best || k < (plain.contains(t) ? 0.99 : 0.0)) continue;
+            double from = !plain.contains(t) ? 0.0 : shape != null && pos.equals(t.block()) ? 0.89 : 0.99;
+            if (Double.isNaN(k) || k > reachTo || k >= best || k < from) continue;
             if (t.oneSided()) {
                 Vector3d tn = t.normal();
                 if (tn == null || tn.dot(d) > 0) continue;
@@ -655,8 +663,9 @@ public final class Tracers {
         Vector3d ref = Math.abs(normal.y) < 0.9 ? new Vector3d(0, 1, 0) : new Vector3d(1, 0, 0);
         Vector3d t1 = new Vector3d(normal).cross(ref).normalize(), t2 = new Vector3d(normal).cross(t1).normalize();
         Vector3d[] frame = {world, t1, t2, normal};
-        double depth = Math.max(half, 0.05);
-        AABB reach = new AABB(world.x, world.y, world.z, world.x, world.y, world.z).inflate(half * 1.5);
+        // as deep as a step, a bevel or a bar standing out of the face goes (the secure door's ribs)
+        double depth = Math.max(1.5 * half, 0.1);
+        AABB reach = new AABB(world.x, world.y, world.z, world.x, world.y, world.z).inflate(half * 2.2);
         List<RenderedMesh.Tri> near = new ArrayList<>();
         for (RenderedMesh.Tri t : tris) if (t.meets(reach)) near.add(t);
         List<Piece> pieces = new ArrayList<>();
@@ -811,8 +820,8 @@ public final class Tracers {
     // from it is unfolded into it first), with the point in the world: {u, v, x, y, z}
 
     // a triangle's part under the hole: its polygon, its normal towards the shooter and its plane (tn . p = plane),
-    // its u, v box, and how to get back from u, v to the world: turned by `back` about `pivot` (null: along the
-    // normal onto the plane, a face parallel to the hit one)
+    // its u, v box, and how to get back from u, v to the world: turned by `back` about `pivot` (null: a projected
+    // face, back along the hit face's normal onto its plane)
     private record Piece(RenderedMesh.Tri tri, List<double[]> poly, Vector3d tn, double plane, double[] box, org.joml.Quaterniond back, Vector3d pivot,
             Vector3d[] frame) {
         Vector3d pointAt(double u, double v) {
@@ -910,6 +919,8 @@ public final class Tracers {
     }
 
     private static final double UNFOLD_MIN = 1e-6;
+    // faces turned less than this from the hit one (cos 60 degrees) are projected, steeper ones unfolded
+    private static final double PROJECT_MIN = 0.5;
 
     private static Piece piece(RenderedMesh.Tri t, Vector3d[] frame, double half, double depth) {
         Vector3d world = frame[0], t1 = frame[1], t2 = frame[2], n = frame[3];
@@ -936,7 +947,15 @@ public final class Tracers {
         Vector3d pivot = null;
         Vector3d e = new Vector3d(n).cross(tn);
         double ee = e.lengthSquared();
-        if (ee > UNFOLD_MIN) {
+        double wmin = Double.MAX_VALUE, wmax = -Double.MAX_VALUE;
+        for (double[] v : poly) {
+            wmin = Math.min(wmin, v[5]);
+            wmax = Math.max(wmax, v[5]);
+        }
+        boolean steep = ee > UNFOLD_MIN && f < PROJECT_MIN;
+        // a steep face away from the line it shares with the hit face's plane (not over an edge of it): left out
+        if (steep && (wmin > 1e-3 || wmax < -1e-3)) return null;
+        if (steep) {
             // the line both planes share: unfold about it
             double dA = n.dot(world);
             pivot = new Vector3d(tn).cross(e).mul(dA).add(new Vector3d(e).cross(n).mul(plane)).div(ee);
