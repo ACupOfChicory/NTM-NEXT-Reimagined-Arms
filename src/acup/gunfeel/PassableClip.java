@@ -57,9 +57,15 @@ public final class PassableClip extends ClipContext {
     // the first block that stops a bullet going from `from` to `to`
     public static BlockHitResult clip(Level level, Vec3 from, Vec3 to) {
         BlockHitResult r = clip0(level, from, to);
-        if (debug && level.isClientSide() && r.getType() != HitResult.Type.MISS)
-            org.slf4j.LoggerFactory.getLogger("ntm-gunfeel").info("[holedebug] clip {} -> {} stops at {} {} {}", from, to, r.getBlockPos(), r.getDirection(), r.getLocation());
+        // the server's bullet too (every tick, misses included): where it really stops
+        if (debug && (r.getType() != HitResult.Type.MISS || !level.isClientSide()))
+            org.slf4j.LoggerFactory.getLogger("ntm-gunfeel").info("[holedebug] {} clip {} -> {} {}", side(level), from, to,
+                    r.getType() == HitResult.Type.MISS ? "flies on" : "stops at " + r.getBlockPos() + " " + r.getDirection() + " " + r.getLocation());
         return r;
+    }
+
+    private static String side(Level level) {
+        return level.isClientSide() ? "client" : "server";
     }
 
     private static BlockHitResult clip0(Level level, Vec3 from, Vec3 to) {
@@ -68,9 +74,10 @@ public final class PassableClip extends ClipContext {
             BlockHitResult hit = level.clip(new PassableClip(from, to, skip));
             if (hit.getType() == HitResult.Type.MISS) return hit;
             BlockState state = level.getBlockState(hit.getBlockPos());
-            if (debug && level.isClientSide())
-                org.slf4j.LoggerFactory.getLogger("ntm-gunfeel").info("[holedebug]   step {}: {} {} face={} at={} inside={} shape={} cells={}", i, hit.getBlockPos(), key(state),
-                        hit.getDirection(), hit.getLocation(), hit.isInside(), shape(state) != null, Structures.cells(level, hit.getBlockPos(), state) != null);
+            if (debug)
+                org.slf4j.LoggerFactory.getLogger("ntm-gunfeel").info("[holedebug]   {} step {}: {} {} face={} at={} inside={} shape={} cells={}{}", side(level), i, hit.getBlockPos(), key(state),
+                        hit.getDirection(), hit.getLocation(), hit.isInside(), shape(state) != null, Structures.cells(level, hit.getBlockPos(), state) != null,
+                        Structures.debug(level, hit.getBlockPos(), state));
             long[] vox = shape(state);
             long[] cells = vox == null ? Structures.cells(level, hit.getBlockPos(), state) : null;
             if (cells != null) {
@@ -79,6 +86,9 @@ public final class PassableClip extends ClipContext {
                 // whichever the bullet meets first: the elevator's platform lies over its base, in the same block
                 BlockHitResult in = march(cells, hit, to.subtract(from), 64);
                 BlockHitResult solid = Structures.solid(level, hit.getBlockPos(), state, from, to);
+                if (debug)
+                    org.slf4j.LoggerFactory.getLogger("ntm-gunfeel").info("[holedebug]     {} model cells: {}, solid part: {}", side(level),
+                            in == null ? "none" : in.getLocation(), solid == null ? "none" : solid.getLocation());
                 if (solid != null && (in == null || solid.getLocation().distanceToSqr(from) < in.getLocation().distanceToSqr(from))) in = solid;
                 if (in != null) return in;
             } else if (vox != null) {

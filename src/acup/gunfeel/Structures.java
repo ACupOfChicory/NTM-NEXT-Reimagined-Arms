@@ -158,6 +158,14 @@ public final class Structures {
         WORLD.clear();
     }
 
+    // /gunfeel holedebug: the elevator's platform as this side has it
+    static String debug(Level level, BlockPos pos, BlockState state) {
+        BlockPos core = core(level, pos, state);
+        if (core == null || !(level.getBlockEntity(core) instanceof BlockEntityCargoElevator elevator)) return "";
+        return " elevator core=" + core.toShortString() + " extension=" + elevator.extension + " height=" + elevator.height
+                + " platform y=" + (core.getY() + 0.75 + elevator.extension) + ".." + (core.getY() + 1.0 + elevator.extension);
+    }
+
     // what stays NTM's in this block after its cells let the bullet through: the elevator's platform
     public static @Nullable BlockHitResult solid(Level level, BlockPos pos, BlockState state, Vec3 from, Vec3 to) {
         BlockPos core = core(level, pos, state);
