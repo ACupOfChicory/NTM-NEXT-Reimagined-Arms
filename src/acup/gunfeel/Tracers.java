@@ -387,7 +387,9 @@ public final class Tracers {
         while (it.hasNext()) {
             Shot s = it.next();
             double t = (now - s.born) / 50_000_000.0;
+            long pf = Perf.start();
             fly(s, level, Math.min(t, s.lifeTicks));
+            Perf.add(Perf.FLY, pf);
             double head = Double.isNaN(s.end) ? Math.min(t, s.lifeTicks) : Math.min(t, s.end);
             double tail = Math.max(0.0, t - Math.max(Config.tracerLength / s.speed, frameTicks * 1.5));
             if (tail >= head) {
@@ -402,10 +404,15 @@ public final class Tracers {
         }
         if (!streaks.isEmpty()) {
             event.getSubmitNodeCollector().submitCustomGeometry(pose, RenderTypes.debugQuads(), (p, vc) -> {
+                long pt = Perf.start();
                 for (float[] k : streaks) streak(p.pose(), vc, k);
+                Perf.add(Perf.TRACERS, pt);
             });
         }
+        long pd = Perf.start();
         holes(event, cam, now);
+        Perf.add(Perf.HOLE_DRAW, pd);
+        Perf.frame(SHOTS.size(), HOLES.size());
     }
 
     // test the bullet's path up to t ticks against blocks and entities; stops it at the first thing it meets
@@ -438,8 +445,12 @@ public final class Tracers {
         } else if (block.getType() != HitResult.Type.MISS) {
             s.end = s.checked + (t - s.checked) * (len > 1e-6 ? reach / len : 0.0);
             stop = block.getLocation();
+            long ph = Perf.start();
             if (Config.bulletHoles && len > 1e-6) addHole(level, block, s.config, dir.scale(1.0 / len));
+            Perf.add(Perf.HOLE_MAKE, ph);
+            long px = Perf.start();
             if (len > 1e-6) BulletFx.blockHit(level, block, dir.scale(1.0 / len));
+            Perf.add(Perf.FX, px);
         }
         if (!s.whizzed) s.whizzed = BulletFx.whizz(level, s.owner, ra, stop);
         // blocks it flew through on the way (leaves): their crumbs, no hole
@@ -1624,6 +1635,14 @@ public final class Tracers {
 
     private static net.minecraft.client.renderer.SubmitNodeCollector.CustomGeometryRenderer drawer(List<Hole> list, Vec3 cam, long now, long life) {
         return (p, vc) -> {
+            long pd = Perf.start();
+            drawHoles(p, vc, list, cam, now, life);
+            Perf.add(Perf.HOLE_DRAW, pd);
+        };
+    }
+
+    private static void drawHoles(com.mojang.blaze3d.vertex.PoseStack.Pose p, VertexConsumer vc, List<Hole> list, Vec3 cam, long now, long life) {
+        {
             for (Hole h : list) {
                 double age = (now - h.born()) / 1e9;
                 double fadeFrom = Math.max(0.0, life / 1e9 - 3.0);
@@ -1653,7 +1672,7 @@ public final class Tracers {
                     }
                 }
             }
-        };
+        }
     }
 
     // the face's two axes: u, v as world axis indices (0 x, 1 y, 2 z)

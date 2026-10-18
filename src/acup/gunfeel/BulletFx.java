@@ -43,17 +43,17 @@ public final class BulletFx {
         Vec3 hitAt = at;
         // a hit inside the block's collision box (a bar of a grate or scaffold, inside its full cube): the crumbs start
         // where the bullet came into the box, else they are stuck inside it
-        var box = state.getCollisionShape(level, hit.getBlockPos());
-        if (!box.isEmpty()) {
-            boolean inside = false;
-            for (var b : box.toAabbs()) if (b.move(hit.getBlockPos()).deflate(1e-3).contains(at)) inside = true;
-            if (inside) {
-                BlockHitResult in = box.clip(at.subtract(dir.normalize().scale(3)), at, hit.getBlockPos());
-                if (in != null) {
-                    at = in.getLocation();
-                    face = in.getDirection();
-                }
-            }
+        // (or of the grate in front of it the bullet came through): back along its line until out of every one
+        Vec3 back = dir.normalize().scale(-0.04);
+        Vec3 probe = at.add(new Vec3(face.getStepX(), face.getStepY(), face.getStepZ()).scale(0.02));
+        boolean walked = false;
+        for (int i = 0; i < 80 && insideCollision(level, probe); i++) {
+            probe = probe.add(back);
+            walked = true;
+        }
+        if (walked) {
+            at = probe;
+            face = Direction.getApproximateNearest(-dir.x, -dir.y, -dir.z);
         }
         Vec3 n = new Vec3(face.getStepX(), face.getStepY(), face.getStepZ());
         // the bullet's direction bounced off the face, so the bits fly back towards the shooter
@@ -107,6 +107,14 @@ public final class BulletFx {
         SoundEvent e = s.id().equalsIgnoreCase("block") ? state.getSoundType().getHitSound() : event(s.id());
         if (e == null) return;
         level.playLocalSound(at.x, at.y, at.z, e, SoundSource.PLAYERS, s.volume(), s.pitch() * (0.9F + r.nextFloat() * 0.2F), false);
+    }
+
+    private static boolean insideCollision(ClientLevel level, Vec3 p) {
+        net.minecraft.core.BlockPos bp = net.minecraft.core.BlockPos.containing(p);
+        BlockState st = level.getBlockState(bp);
+        if (st.isAir()) return false;
+        for (var b : st.getCollisionShape(level, bp).toAabbs()) if (b.move(bp).inflate(0.01).contains(p)) return true;
+        return false;
     }
 
     private static final java.util.Map<net.minecraft.world.level.block.Block, Integer> HIT_NOTED = new java.util.HashMap<>();
