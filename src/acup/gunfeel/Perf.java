@@ -6,8 +6,8 @@ public final class Perf {
     private Perf() {
     }
 
-    public static final int FLY = 0, HOLE_MAKE = 1, FX = 2, HOLE_DRAW = 3, TRACERS = 4;
-    private static final String[] NAMES = {"flight", "making holes", "hit effects", "drawing holes", "tracers"};
+    public static final int FLY = 0, HOLE_MAKE = 1, FX = 2, HOLE_DRAW = 3, TRACERS = 4, HOLE_BAKE = 5;
+    private static final String[] NAMES = {"flight", "making holes", "hit effects", "drawing holes", "tracers", "baking holes"};
     private static final long[] NANOS = new long[NAMES.length];
     private static final int[] CALLS = new int[NAMES.length];
     private static long since, frames;

@@ -34,6 +34,7 @@ public final class HoleRender {
     private static RenderPipeline pipeline(String location, boolean cull) {
         return RenderPipeline.builder(entitySnippet())
             .withLocation(Identifier.fromNamespaceAndPath("ntmgunfeel", location))
+            .withVertexShader(Identifier.fromNamespaceAndPath("ntmgunfeel", "core/bullet_hole"))
             .withShaderDefine("ALPHA_CUTOUT", 0.1F)
             .withShaderDefine("PER_FACE_LIGHTING")
             .withBindGroupLayout(BindGroupLayouts.SAMPLER1)

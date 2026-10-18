@@ -82,6 +82,7 @@ public final class Config {
     public static String armPathTimes = "";
     public static boolean instantSwitch = true;
     public static boolean bulletFx = true;
+    public static boolean holeCache = true;
     // arm thickness before armScale, the same on every gun (Maresleg / Old Classic); 0 = grows with the arm's length
     public static float armBaseRight = 1.70F;
     public static float armBaseLeft = 3.02F;
@@ -190,6 +191,8 @@ public final class Config {
               until the next tick, and the new gun starts its draw animation without waiting for the server
             bulletFx: particles and sounds of bullets (block hits, a bullet whizzing past, the in-flight sound) by the
               rules in config/ntm-gunfeel-bullets.txt
+            holeCache: bullet holes kept on the graphics card in batches, rebuilt only when a hole comes or goes, not
+              every frame (false = the old way, every hole sent again each frame)
             Every value except enabled can be overridden per gun in config/ntm-gunfeel-guns.properties
             (hbm\\:gun_maresleg.armRollLeft = -55) or with /gunfeel set <key> <value> for the held gun.
             Hand positions per gun: <gun>.right / <gun>.left there, or /gunfeel grip""";
@@ -330,6 +333,7 @@ public final class Config {
         armPathTimes = p.getProperty("armPathTimes", armPathTimes).trim();
         instantSwitch = bool(p, "instantSwitch", instantSwitch);
         bulletFx = bool(p, "bulletFx", bulletFx);
+        holeCache = bool(p, "holeCache", holeCache);
         armBaseRight = num(p, "armBaseRight", armBaseRight);
         armBaseLeft = num(p, "armBaseLeft", armBaseLeft);
         armLoadScaleRight = num(p, "armLoadScaleRight", armLoadScaleRight);
@@ -425,6 +429,7 @@ public final class Config {
         p.setProperty("armPathTimes", armPathTimes);
         p.setProperty("instantSwitch", Boolean.toString(instantSwitch));
         p.setProperty("bulletFx", Boolean.toString(bulletFx));
+        p.setProperty("holeCache", Boolean.toString(holeCache));
         p.setProperty("armBaseRight", Float.toString(armBaseRight));
         p.setProperty("armBaseLeft", Float.toString(armBaseLeft));
         p.setProperty("armLoadScaleRight", Float.toString(armLoadScaleRight));
