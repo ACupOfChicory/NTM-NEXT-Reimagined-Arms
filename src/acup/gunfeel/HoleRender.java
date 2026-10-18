@@ -17,9 +17,10 @@ import net.minecraft.resources.Identifier;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.client.event.RegisterRenderPipelinesEvent;
 
-// Client: the render type of bullet holes. Like entity_translucent but it does not write depth: a mark drawn before
-// the block under it (glass, which is drawn later) would otherwise hide the block's own pixels and everything seen
-// through them. A small depth bias keeps it on top of the face it lies on.
+// Client: the render type of bullet holes. Like entity_translucent, with a small depth bias that keeps it on top of
+// the face it lies on. It writes depth: whatever is drawn after it behind its pixels (glass seen through a hole in a
+// door's window, clouds and rain seen through a hole in glass) stays behind the hole instead of covering it. Holes on
+// the translucent terrain (glass) are drawn after it ("late"), so they never hide their own block's pixels.
 public final class HoleRender {
     public static final RenderPipeline PIPELINE = pipeline("pipeline/bullet_hole", false);
     // one-sided: holes on a full cube (copper grate), seen only from outside like the cube's own faces; from inside,
@@ -33,7 +34,7 @@ public final class HoleRender {
             .withShaderDefine("PER_FACE_LIGHTING")
             .withBindGroupLayout(BindGroupLayouts.SAMPLER1)
             .withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
-            .withDepthStencilState(new DepthStencilState(CompareOp.GREATER_THAN_OR_EQUAL, false, 1.0F, 10.0F))
+            .withDepthStencilState(new DepthStencilState(CompareOp.GREATER_THAN_OR_EQUAL, true, 1.0F, 10.0F))
             .withCull(cull)
             .build();
     }
