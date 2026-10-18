@@ -12,6 +12,12 @@ import acup.gunfeel.GunFeel;
 
 @Mixin(value = HbmAnimations.class, remap = false)
 public abstract class MixinHbmAnimations {
+    // Arms.measuring: the gun as it is with no animation playing
+    @Inject(method = "getRelevantAnim(I)Lcom/hbm/render/anim/HbmAnimations$Animation;", at = @At("HEAD"), cancellable = true)
+    private static void gunfeel$still(int index, CallbackInfoReturnable<HbmAnimations.Animation> cir) {
+        if (acup.gunfeel.Arms.measuring) cir.setReturnValue(null);
+    }
+
     // Tone down NTM's own "RECOIL" animation bus in first person; the spring kick replaces most of it.
     @Inject(method = "getRelevantTransformation(Ljava/lang/String;I)[D", at = @At("RETURN"), cancellable = true)
     private static void gunfeel$recoilBus(String bus, int index, CallbackInfoReturnable<double[]> cir) {

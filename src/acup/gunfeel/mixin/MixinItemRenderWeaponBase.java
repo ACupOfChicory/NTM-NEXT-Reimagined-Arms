@@ -26,11 +26,29 @@ public abstract class MixinItemRenderWeaponBase {
     private static final String RENDER = "Lcom/hbm/render/item/weapon/sedna/ItemRenderWeaponBase;renderFirstPerson"
             + "(Lnet/minecraft/world/item/ItemStack;Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;I)V";
 
+    @org.spongepowered.asm.mixin.Shadow
+    protected abstract void setupTransformsAndSubmit(ItemStack stack, LocalPlayer player, PoseStack pose, SubmitNodeCollector collector, int light);
+
     @Inject(method = "setupTransformsAndSubmit", at = @At("HEAD"))
     private void gunfeel$begin(ItemStack stack, LocalPlayer player, PoseStack pose, SubmitNodeCollector collector, int light, CallbackInfo ci) {
-        GunFeel.current = (ItemRenderWeaponBase) (Object) this;
-        GunFeel.currentAkimbo = ((ItemRenderWeaponBase) (Object) this).isAkimbo(player);
-        if (Config.enabled) GunFeel.checkShot(stack);
+        ItemRenderWeaponBase self = (ItemRenderWeaponBase) (Object) this;
+        // first time in hand, during its draw animation: read its rest pose first (Arms.measuring)
+        if (!Arms.measuring && Config.enabled && Config.arms && !(collector instanceof OtherHandCollector) && !self.isAkimbo(player)
+                && com.hbm.render.anim.HbmAnimations.getRelevantAnim(0) != null && Arms.needsMeasure(stack.getItem())) {
+            PoseStack copy = new PoseStack();
+            copy.last().set(pose.last());
+            Arms.measuring = true;
+            try {
+                setupTransformsAndSubmit(stack, player, copy, Arms.NOWHERE, light);
+            } catch (Throwable t) {
+                GunFeel.LOGGER.warn("Could not read the rest pose of {}", stack.getItem(), t);
+            } finally {
+                Arms.measuring = false;
+            }
+        }
+        GunFeel.current = self;
+        GunFeel.currentAkimbo = self.isAkimbo(player);
+        if (Config.enabled && !Arms.measuring) GunFeel.checkShot(stack);
         Arms.begin(stack);
     }
 
@@ -44,7 +62,7 @@ public abstract class MixinItemRenderWeaponBase {
 
     @Inject(method = "setupTransformsAndSubmit", at = @At(value = "INVOKE", target = RENDER, shift = At.Shift.AFTER))
     private void gunfeel$arms(ItemStack stack, LocalPlayer player, PoseStack pose, SubmitNodeCollector collector, int light, CallbackInfo ci) {
-        Arms.end(stack, collector, light, Config.enabled && !GunFeel.currentAkimbo && !(collector instanceof OtherHandCollector));
+        Arms.end(stack, collector, light, Config.enabled && !Arms.measuring && !GunFeel.currentAkimbo && !(collector instanceof OtherHandCollector));
     }
 
     @Inject(method = "submitPart(Lnet/minecraft/client/renderer/SubmitNodeCollector;Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/rendertype/RenderType;Lcom/hbm/render/loader/HFRWavefrontObject;III)V",
@@ -57,7 +75,7 @@ public abstract class MixinItemRenderWeaponBase {
     @Inject(method = "setupTransformsAndSubmit", at = @At(value = "INVOKE", target = RENDER))
     private void gunfeel$kick(ItemStack stack, LocalPlayer player, PoseStack pose, SubmitNodeCollector collector, int light, CallbackInfo ci) {
         Arms.aimFrame(pose);
-        if (Config.enabled) {
+        if (Config.enabled && !Arms.measuring) {
             Vector3f pivot = new Vector3f();
             float size = Arms.kickFrame(stack.getItem(), pivot);
             if (size > 0F) ModelRecoil.apply(pose, size, pivot);
@@ -71,7 +89,7 @@ public abstract class MixinItemRenderWeaponBase {
     @Inject(method = "renderSmokeNodes", at = @At("HEAD"))
     private static void gunfeel$smoke(SubmitNodeCollector collector, PoseStack pose, java.util.List<ItemGunBaseNT.SmokeNode> nodes, double scale, int light, CallbackInfo ci) {
         // the muzzle of the gun in the player's hands: the player's own tracers start there
-        if (GunFeel.current != null) acup.gunfeel.Tracers.muzzle(pose);
+        if (GunFeel.current != null && !Arms.measuring) acup.gunfeel.Tracers.muzzle(pose);
         if (!Config.enabled) return;
         try {
             for (ItemGunBaseNT.SmokeNode node : nodes) if (node.alpha < 0.0) node.alpha = 0.0;

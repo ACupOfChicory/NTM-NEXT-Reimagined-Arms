@@ -91,6 +91,41 @@ public final class Arms {
     private Arms() {
     }
 
+    // A gun's rest pose is read while no animation moves it. Taken in hand for the first time it plays its draw
+    // animation, so the arms would wait for it to end: that frame the gun is first run through its renderer with
+    // the animations held still and drawn nowhere (measuring), only to read the pose.
+    public static boolean measuring;
+    private static final Map<Item, Integer> MEASURES = new IdentityHashMap<>();
+    public static final net.minecraft.client.renderer.SubmitNodeCollector NOWHERE = (net.minecraft.client.renderer.SubmitNodeCollector)
+            java.lang.reflect.Proxy.newProxyInstance(Arms.class.getClassLoader(), new Class<?>[] {net.minecraft.client.renderer.SubmitNodeCollector.class},
+                    (proxy, m, args) -> {
+                        Class<?> t = m.getReturnType();
+                        if (t.isInstance(proxy)) return proxy;
+                        if (m.getDeclaringClass() == Object.class) {
+                            return switch (m.getName()) {
+                                case "hashCode" -> System.identityHashCode(proxy);
+                                case "equals" -> proxy == args[0];
+                                default -> "Arms.NOWHERE";
+                            };
+                        }
+                        if (t == boolean.class) return false;
+                        if (t == int.class) return 0;
+                        if (t == long.class) return 0L;
+                        if (t == float.class) return 0F;
+                        if (t == double.class) return 0.0;
+                        return null;
+                    });
+
+    // its rest pose not read yet (a few tries per gun: one whose pose cannot be read is not run twice every frame)
+    public static boolean needsMeasure(Item held) {
+        GunGeometry g = CURRENT.get(held);
+        if (g != null && g.aligned()) {
+            GunRest gr = GUN_REST.get(g);
+            if (gr != null && gr.valid) return false;
+        }
+        return MEASURES.merge(held, 1, Integer::sum) <= 5;
+    }
+
     // the variant of the gun last drawn in hand
     public static GunGeometry geometry(Item item) {
         GunGeometry g = CURRENT.get(item);
@@ -229,6 +264,15 @@ public final class Arms {
         REL.set(KICKED).invert().mul(BODY);
         haveRel = true;
         relItem = item;
+        if (measuring) {
+            if (!haveCamera) return;
+            GunRest gr = GUN_REST.computeIfAbsent(geometry, k -> new GunRest());
+            Matrix4f aimedInv = new Matrix4f(AIMED).invert();
+            gr.body.set(aimedInv).mul(BODY);
+            for (int i = 0; i < 2; i++) gr.hold[i].set(aimedInv).mul(HAVE_FOLLOW[i] ? FOLLOW[i] : BODY);
+            gr.valid = true;
+            return;
+        }
         if (drawArms && haveCamera && Config.arms) draw(collector, light);
     }
 
