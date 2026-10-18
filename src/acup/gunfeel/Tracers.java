@@ -99,7 +99,7 @@ public final class Tracers {
     // mask = which 1/16-block cells of the face show the block's pixels (null = all): cells mask.w x mask.h from
     // cell (u0, v0) on the face's two axes, in 1/16 blocks
     private record Hole(Vec3 pos, Direction face, int turn, long born, int light, int kind, float size, double[] rect, Mask mask, double plane, boolean late, boolean cull,
-            float[] mesh, boolean front, BlockPos block, BlockState state, boolean drawn, Follow follow, Vec3 hit) {
+            float[] mesh, boolean front, BlockPos block, BlockState state, boolean drawn, Follow follow, Vec3 hit, boolean machine) {
     }
 
     // A hole on a part a renderer moves (a door's leaf, a press head): kept in the part's own space and put where the
@@ -525,7 +525,7 @@ public final class Tracers {
                 && !glassLike(level.getBlockState(hit.getBlockPos()));
         HOLES.addLast(new Hole(hit.getLocation(), hit.getDirection(), (int) (Math.random() * 8), System.nanoTime(), light, kind, size, rect, mask, plane,
                 translucent(level.getBlockState(hit.getBlockPos())) || glassLike(level.getBlockState(hit.getBlockPos())),
-                cull, null, false, hit.getBlockPos().immutable(), level.getBlockState(hit.getBlockPos()), false, null, null));
+                cull, null, false, hit.getBlockPos().immutable(), level.getBlockState(hit.getBlockPos()), false, null, null, false));
         trimHoles();
     }
 
@@ -617,7 +617,7 @@ public final class Tracers {
         int light = LightCoordsUtil.getLightCoords(level, pos);
         HOLES.addLast(new Hole(world, hit.getDirection(), turn, System.nanoTime(), light, kind, size, null, null, Double.NaN,
                 translucent(level.getBlockState(pos)) || glassLike(level.getBlockState(pos)), false, mesh,
-                onBoxFace(level, pos, at, normal) && !glassLike(level.getBlockState(pos)), pos.immutable(), level.getBlockState(pos), false, null, null));
+                onBoxFace(level, pos, at, normal) && !glassLike(level.getBlockState(pos)), pos.immutable(), level.getBlockState(pos), false, null, null, false));
         trimHoles();
     }
 
@@ -890,7 +890,7 @@ public final class Tracers {
             boolean late = first.tex().glass() || first.block() != null && (translucent(state) || glassLike(state));
             Follow follow = first.anchor() == null ? null : new Follow(first.anchor(), at, mesh, light);
             HOLES.addLast(new Hole(new Vec3(at.x, at.y, at.z), hit.getDirection(), turn, born, light, kind, size, null, null, Double.NaN, late, false, mesh,
-                    front, on.immutable(), state, first.moving() && first.anchor() == null, follow, hitAt));
+                    front, on.immutable(), state, first.moving() && first.anchor() == null, follow, hitAt, true));
             dbg("  hole group: {} polygons at {} on {} tex={} front={} late={} follows={} moving={}", g.polys().size(), v(at), on,
                     RenderedMesh.texName(first.tex()), front, late, follow != null, first.moving());
         }
@@ -902,14 +902,25 @@ public final class Tracers {
         return true;
     }
 
-    // at most holeMax holes: the oldest shots' holes go first, a shot's holes all together (one shot may leave
-    // several: over an edge, over a door's leaf and frame)
+    // at most holeMax hits' holes on blocks and holeMaxMachines hits' on what a renderer draws (NTM machines and
+    // doors, where one hit leaves a piece per part it covers): the oldest hits go first, a hit's pieces together
     private static void trimHoles() {
-        int max = Math.max(1, Config.holeMax);
-        while (HOLES.size() > max) {
-            long first = HOLES.peekFirst().born();
-            while (!HOLES.isEmpty() && HOLES.peekFirst().born() == first) HOLES.removeFirst();
+        trim(false, Config.holeMax);
+        trim(true, Config.holeMaxMachines);
+    }
+
+    private static void trim(boolean machine, int limit) {
+        int max = Math.max(1, limit);
+        ArrayDeque<Long> hits = new ArrayDeque<>();
+        long last = Long.MIN_VALUE;
+        for (Hole h : HOLES) if (h.machine() == machine && h.born() != last) {
+            hits.add(h.born());
+            last = h.born();
         }
+        if (hits.size() <= max) return;
+        java.util.Set<Long> drop = new java.util.HashSet<>();
+        while (hits.size() > max) drop.add(hits.removeFirst());
+        HOLES.removeIf(h -> h.machine() == machine && drop.contains(h.born()));
     }
 
     // glass: the blocks tagged so, sounding like glass, or named so

@@ -15,6 +15,7 @@ public final class Config {
     public static boolean tracers = true, bulletHoles = true;
     public static float tracerLength = 8F, tracerWidth = 0.02F, holeLife = 30F, holeSize = 0.28F, scorchSize = 0.9F;
     public static int holeMax = 500;
+    public static int holeMaxMachines = 500;
     // blocks whose holes follow only the hitbox, not the texture's see-through pixels ("*" = any letters)
     public static String holeHitboxBlocks = "*glass*";
     // Hip-fire X position of the gun relative to NTM's: 1 = NTM default, 0 = screen centre.
@@ -113,7 +114,8 @@ public final class Config {
             NTM Gun Feel. Saved values are re-read while the game runs.
             tracers: thin tracers in the NTM bullet's colours instead of NTM's wide ribbon (needs the mod on the server)
             tracerLength, tracerWidth: tracer length and half width, blocks
-            bulletHoles: holes where bullets hit blocks; holeLife seconds, holeMax holes at most (the oldest shots' go first), holeSize blocks;
+            bulletHoles: holes where bullets hit blocks; holeLife seconds, holeMax hits' holes at most on blocks, holeMaxMachines on NTM
+              machines and doors (oldest first; one hit there leaves a piece per part, heavier to draw), holeSize blocks;
               scorchSize: the soot mark of explosive / incendiary bullets instead of a hole, blocks
               holes are cut to the hitbox and to the block's visible pixels; blocks drawn without a block model
               (machines) get none. holeHitboxBlocks: block ids, comma separated, "*" = any letters, whose holes are
@@ -278,6 +280,7 @@ public final class Config {
         holeSize = num(p, "holeSize", holeSize);
         scorchSize = num(p, "scorchSize", scorchSize);
         holeMax = Math.round(num(p, "holeMax", holeMax));
+        holeMaxMachines = Math.round(num(p, "holeMaxMachines", holeMaxMachines));
         holeHitboxBlocks = p.getProperty("holeHitboxBlocks", holeHitboxBlocks).trim();
         modelTilt = p.getProperty("modelTilt", modelTilt).trim();
         hipY = num(p, "hipY", hipY);
@@ -374,6 +377,7 @@ public final class Config {
         p.setProperty("holeSize", Float.toString(holeSize));
         p.setProperty("scorchSize", Float.toString(scorchSize));
         p.setProperty("holeMax", Integer.toString(holeMax));
+        p.setProperty("holeMaxMachines", Integer.toString(holeMaxMachines));
         p.setProperty("holeHitboxBlocks", holeHitboxBlocks);
         p.setProperty("modelTilt", modelTilt);
         p.setProperty("hipY", Float.toString(hipY));
