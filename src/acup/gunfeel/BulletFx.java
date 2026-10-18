@@ -158,8 +158,15 @@ public final class BulletFx {
             var box = new net.minecraft.world.phys.AABB(at.subtract(nd0.scale(0.5)), at.add(nd0.scale(3))).inflate(0.5);
             List<RenderedMesh.Tri> near = new java.util.ArrayList<>(RenderedMesh.within(level, box));
             int drawnBy = near.size();
-            near.addAll(RenderedMesh.models(level, box, pos, new net.minecraft.world.phys.AABB(pos), new boolean[1],
-                    java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>())));
+            // block models only of the machine's own mod (its other blocks): the line runs on through the hitbox,
+            // past the model, into the grass and stone behind it
+            String ns = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(level.getBlockState(pos).getBlock()).getNamespace();
+            for (RenderedMesh.Tri t : RenderedMesh.models(level, box, pos, new net.minecraft.world.phys.AABB(pos), new boolean[1],
+                    java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>()))) {
+                if (t.block() == null || t.block().equals(pos)
+                        || net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(level.getBlockState(t.block()).getBlock()).getNamespace().equals(ns))
+                    near.add(t);
+            }
             why = "no triangles";
             Crumbs got = find(near, at, dir);
             note(level, pos, drawnBy, near.size() - drawnBy, got);
@@ -215,8 +222,9 @@ public final class BulletFx {
                     crossing, clear, noColour, noColour > 0 ? "; " + why : "", first == null ? Double.NaN : firstT - 0.3);
             if (first != null) return first;
             org.joml.Vector3d pt = new org.joml.Vector3d(at.x, at.y, at.z);
+            // no shown pixel on the line (the hitbox is bigger than the model): the machine's surface nearest the hit
             Crumbs best = null;
-            double bestD = 0.1;
+            double bestD = 1.0;
             for (RenderedMesh.Tri t : near) {
                 org.joml.Vector3d tn = t.normal();
                 if (tn == null) continue;

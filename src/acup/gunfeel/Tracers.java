@@ -142,8 +142,9 @@ public final class Tracers {
             this.light = light;
         }
 
-        void place(ClientLevel level, RenderedMesh.PartPose now) {
-            if (now.pose().equals(placed) && java.util.Arrays.deepEquals(now.planes(), cut)) return;
+        // true when the part moved (or was cut otherwise) since the last frame
+        boolean place(ClientLevel level, RenderedMesh.PartPose now) {
+            if (now.pose().equals(placed) && java.util.Arrays.deepEquals(now.planes(), cut)) return false;
             placed = new org.joml.Matrix4f(now.pose());
             cut = now.planes() == null ? null : copy(now.planes());
             Vector3f c = placed.transformPosition(center, new Vector3f());
@@ -187,6 +188,7 @@ public final class Tracers {
             }
             if (at.distanceToSqr(pos) > 1e-4) light = LightCoordsUtil.getLightCoords(level, BlockPos.containing(at.x + n.x * 0.05, at.y + n.y * 0.05, at.z + n.z * 0.05));
             pos = at;
+            return true;
         }
 
         private static float[][] copy(float[][] a) {
@@ -224,7 +226,11 @@ public final class Tracers {
             if (poses == null) return true;
             RenderedMesh.PartPose pp = poses.get(f.key);
             if (pp == null) return true;
-            f.place(level, pp);
+            // moved: its batch is built again (a door standing still costs nothing)
+            if (f.place(level, pp)) {
+                Batch b = BATCHED.get(h);
+                if (b != null) b.dirty = true;
+            }
             return false;
         });
     }
@@ -1818,7 +1824,8 @@ public final class Tracers {
     // in a row; a batch is built again only when a hole joins or leaves it, not every frame. Its positions are from
     // an origin of its own (the shader adds ModelOffset = origin - camera), and it is drawn both ways round through
     // the culling pipeline, so nothing in it depends on where the camera is. Not in a batch: holes fading out, on
-    // moving parts, on glass (drawn late).
+    // glass (drawn late). Holes on moving parts are in batches too: their batch is built again on the frames the part
+    // moves.
     private static final class Batch {
         final int kind;
         final boolean mesh;
@@ -1846,7 +1853,7 @@ public final class Tracers {
         double fadeFrom = Math.max(0.0, life / 1e9 - 3.0);
         for (Batch b : BATCHES) b.now.clear();
         if (on) for (Hole h : HOLES) {
-            if (h.late() || h.follow() != null || (now - h.born()) / 1e9 >= fadeFrom) continue;
+            if (h.late() || (now - h.born()) / 1e9 >= fadeFrom) continue;
             Batch b = BATCHED.get(h);
             if (b == null) {
                 int key = h.kind() * 2 + (h.mesh() != null ? 1 : 0);
@@ -1954,9 +1961,13 @@ public final class Tracers {
     // a cut hole for a batch: each polygon wound so it is seen from the side its normal points to, and (two-sided)
     // once more the other way round. The normal is turned as the polygon winds, so it is lit as meshQuads() lights it
     private static void bakeMesh(PoseStack.Pose p, VertexConsumer vc, Hole h, Vec3 origin) {
-        float[] m = h.mesh();
+        Follow f = h.follow();
+        float[] m = f != null ? f.mesh : h.mesh();
+        if (m == null) return;
+        Vec3 pos = f != null ? f.pos : h.pos();
+        int light = f != null ? f.light : h.light();
         float nx = m[0], ny = m[1], nz = m[2];
-        float bx = (float) (h.pos().x - origin.x), by = (float) (h.pos().y - origin.y), bz = (float) (h.pos().z - origin.z);
+        float bx = (float) (pos.x - origin.x), by = (float) (pos.y - origin.y), bz = (float) (pos.z - origin.z);
         int copies = h.front() || h.cull() ? 1 : 2;
         int k = 3;
         while (k < m.length) {
@@ -1979,7 +1990,7 @@ public final class Tracers {
                     for (int t = 0; t < 4; t++) {
                         int o = base + idx[rev ? (4 - t) % 4 : t] * 5;
                         vc.addVertex(p, bx + m[o], by + m[o + 1], bz + m[o + 2]).setColor(0xFFFFFFFF).setUv(m[o + 3], m[o + 4])
-                                .setOverlay(OverlayTexture.NO_OVERLAY).setLight(h.light()).setNormal(p, sign * nx, sign * ny, sign * nz);
+                                .setOverlay(OverlayTexture.NO_OVERLAY).setLight(light).setNormal(p, sign * nx, sign * ny, sign * nz);
                     }
                 }
             }
