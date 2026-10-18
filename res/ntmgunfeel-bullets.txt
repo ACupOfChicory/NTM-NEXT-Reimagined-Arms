@@ -1,6 +1,9 @@
 # NTM-NEXT Reimagined Arms: the mod's own bullet rules (syntax: config/ntm-gunfeel-bullets.txt, whose lines win)
 break minecraft:pointed_dripstone,minecraft:flower_pot,minecraft:decorated_pot instant drop
 break #minecraft:leaves hits 3 through
+# wood: planks and what is made of them (not chests, barrels, shelves and other storage: they would spill)
+# break once the bullets' damage on it adds up to 15 x its hardness (planks 30, doors 45), then the bullet flies on
+break #minecraft:planks,#minecraft:wooden_slabs,#minecraft:wooden_stairs,#minecraft:wooden_fences,#minecraft:fence_gates,#minecraft:wooden_doors,#minecraft:wooden_trapdoors,#minecraft:wooden_buttons,#minecraft:wooden_pressure_plates,#minecraft:all_signs,minecraft:bamboo_mosaic,minecraft:crafting_table,minecraft:bookshelf,minecraft:ladder,minecraft:composter,minecraft:note_block,minecraft:loom,minecraft:cartography_table,minecraft:fletching_table,minecraft:smithing_table damage 15 drop pass
 break minecraft:melon,minecraft:pumpkin,minecraft:carved_pumpkin,minecraft:jack_o_lantern hits 4 drop
 hit * particles=block*6,minecraft:smoke*1 sound=block/0.6
 hit @metal particles=block*4,minecraft:crit*2 sound=hbm:metal_impact/0.5
