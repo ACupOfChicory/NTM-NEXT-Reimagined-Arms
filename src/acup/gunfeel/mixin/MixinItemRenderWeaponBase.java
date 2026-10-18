@@ -32,6 +32,9 @@ public abstract class MixinItemRenderWeaponBase {
     @Inject(method = "setupTransformsAndSubmit", at = @At("HEAD"))
     private void gunfeel$begin(ItemStack stack, LocalPlayer player, PoseStack pose, SubmitNodeCollector collector, int light, CallbackInfo ci) {
         ItemRenderWeaponBase self = (ItemRenderWeaponBase) (Object) this;
+        // the gun drawn may not be the one in hand (switching slots: the old one is lowered, the new one raised):
+        // its own settings, not the defaults
+        acup.gunfeel.Config.select(net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
         // first time in hand, during its draw animation: read its rest pose first (Arms.measuring)
         if (!Arms.measuring && Config.enabled && Config.arms && !(collector instanceof OtherHandCollector) && !self.isAkimbo(player)
                 && com.hbm.render.anim.HbmAnimations.getRelevantAnim(0) != null && Arms.needsMeasure(stack.getItem())) {
@@ -108,6 +111,9 @@ public abstract class MixinItemRenderWeaponBase {
     @Inject(method = "setupTransformsAndSubmit", at = @At("RETURN"))
     private void gunfeel$end(ItemStack stack, LocalPlayer player, PoseStack pose, SubmitNodeCollector collector, int light, CallbackInfo ci) {
         GunFeel.current = null;
+        if (Arms.measuring) return;
+        var held = player.getMainHandItem().getItem();
+        Config.select(held instanceof ItemGunBaseNT ? net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(held).toString() : null);
     }
 
     // Hip-fire position, moved toward the centre of the screen; the aimed position is unchanged.

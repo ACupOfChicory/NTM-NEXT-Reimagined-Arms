@@ -417,11 +417,27 @@ public final class Arms {
                     mix.length = r.length + (there.length - r.length) * w;
                     mix.s = r.s + (there.s - r.s) * w;
                     mix.hand.set(r.hand);
-                    mix.shoulder.set(r.shoulder);
+                    mix.shoulder.set(r.shoulder).add(onPath[7], onPath[8], onPath[9]);
                     mix.axis.set(r.axis);
                     mix.center.set(r.center);
                     mix.local.set(r.local);
                     mix.crop = r.crop;
+                }
+                // a hand near the eye: show at least armPathMinLength pixels of the arm, not the last one or two
+                if (Config.armPathMinLength > 0F) {
+                    if (mix == r) {
+                        mix = new ArmRest();
+                        mix.valid = true;
+                        mix.length = r.length;
+                        mix.s = r.s;
+                        mix.hand.set(r.hand);
+                        mix.shoulder.set(r.shoulder).add(onPath[7], onPath[8], onPath[9]);
+                        mix.axis.set(r.axis);
+                        mix.center.set(r.center);
+                        mix.local.set(r.local);
+                        mix.crop = r.crop;
+                    }
+                    mix.length = Math.max(mix.length, Config.armPathMinLength / 16F * mix.s);
                 }
                 float holdRoll = right ? Config.armRollRight : Config.armRollLeft;
                 float loadRoll = right ? Config.armLoadRollRight : Config.armLoadRollLeft;
@@ -705,7 +721,7 @@ public final class Arms {
     // /<bus> to apply only to animations that have that bus (SPAS-12: RELOAD/PumpGrip = the empty reload).
     // Each entry: {t, w, kind (0 live, 1 bus time, 2 fixed point), b, x, y, z}
     // armLeftPath / armRightPath: one key, ms -> grip (part null) or a point of a part as drawn
-    private record PathKey(float ms, String part, int nth, float[] at, float[] side) {
+    private record PathKey(float ms, String part, int nth, float[] at, float[] side, float[] shoulder) {
     }
 
     private static final String[] pathSource = new String[2];
@@ -726,7 +742,7 @@ public final class Arms {
                     String t = e.substring(colon + 1);
                     PathKey k;
                     if (t.equalsIgnoreCase("grip")) {
-                        k = new PathKey(ms, null, 0, null, null);
+                        k = new PathKey(ms, null, 0, null, null, null);
                     } else {
                         int at = t.indexOf('@');
                         String part = t.substring(0, at), pt = t.substring(at + 1);
@@ -737,9 +753,12 @@ public final class Arms {
                             nth = n.equalsIgnoreCase("last") ? -1 : Integer.parseInt(n);
                             part = part.substring(0, hash);
                         }
+                        int gt = pt.indexOf('>');
+                        float[] shoulder = gt < 0 ? new float[3] : xyz(pt.substring(gt + 1));
+                        if (gt >= 0) pt = pt.substring(0, gt);
                         int sl = pt.indexOf('/');
                         float[] side = sl < 0 ? NO_CARRY.dir : xyz(pt.substring(sl + 1));
-                        k = new PathKey(ms, part, nth, xyz(sl < 0 ? pt : pt.substring(0, sl)), side);
+                        k = new PathKey(ms, part, nth, xyz(sl < 0 ? pt : pt.substring(0, sl)), side, shoulder);
                     }
                     if (!list.isEmpty() && ms <= list.get(list.size() - 1).ms()) continue;
                     list.add(k);
@@ -769,7 +788,7 @@ public final class Arms {
         return found < 0 ? null : new Matrix4f(FRAME_POSE[found]).mul(FROM_ALIGNED);
     }
 
-    // {weight on the path (0 = at the grip), point x,y,z, side x,y,z} in camera space, or null when off the path
+    // {weight on the path (0 = at the grip), point x,y,z, side x,y,z, shoulder shift x,y,z} in camera space, or null off the path
     private static float[] pathState(int hand, Matrix4f cameraInv) {
         String src = hand == 0 ? Config.armRightPath : Config.armLeftPath;
         if (src.isEmpty()) return null;
@@ -796,11 +815,12 @@ public final class Arms {
         float s = u * u * (3F - 2F * u);
         float[] pa = pathPoint(a, cameraInv), pb = pathPoint(b, cameraInv);
         if (pa == null && pb == null) return null;
-        if (pa == null) return new float[] {s, pb[0], pb[1], pb[2], pb[3], pb[4], pb[5]};
-        if (pb == null) return new float[] {1F - s, pa[0], pa[1], pa[2], pa[3], pa[4], pa[5]};
-        float[] out = new float[7];
+        // the grip end has no shoulder shift: it fades in and out with the weight
+        if (pa == null) return new float[] {s, pb[0], pb[1], pb[2], pb[3], pb[4], pb[5], pb[6] * s, pb[7] * s, pb[8] * s};
+        if (pb == null) return new float[] {1F - s, pa[0], pa[1], pa[2], pa[3], pa[4], pa[5], pa[6] * (1F - s), pa[7] * (1F - s), pa[8] * (1F - s)};
+        float[] out = new float[10];
         out[0] = 1F;
-        for (int j = 0; j < 6; j++) out[j + 1] = pa[j] + (pb[j] - pa[j]) * s;
+        for (int j = 0; j < 9; j++) out[j + 1] = pa[j] + (pb[j] - pa[j]) * s;
         return out;
     }
 
@@ -813,7 +833,7 @@ public final class Arms {
         Vector3f at = within.transformPosition(key.at()[0], key.at()[1], key.at()[2], new Vector3f());
         Vector3f d = new Vector3f(key.side());
         Vector3f side = within.transformDirection(new Vector3f(d)).normalize().mul(d.length());
-        return new float[] {at.x, at.y, at.z, side.x, side.y, side.z};
+        return new float[] {at.x, at.y, at.z, side.x, side.y, side.z, key.shoulder()[0], key.shoulder()[1], key.shoulder()[2]};
     }
 
     private static Map<String, List<float[]>> parseCarryKeys(String src) {
