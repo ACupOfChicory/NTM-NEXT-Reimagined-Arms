@@ -69,7 +69,10 @@ public final class BulletFx {
             GunFeel.LOGGER.info("Bullet hit effects on {}: render shape {}, particle texture {}, {} particle kinds, sound {}",
                     net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(state.getBlock()), state.getRenderShape(),
                     noParticleTexture(state) ? "missing" : "ok", fx.particles().size(), fx.sound() == null ? "none" : fx.sound().id());
-        for (BulletRules.Particle part : fx.particles()) {
+        // only full blocks give off particles: on grates, scaffold, slabs and the like they got stuck inside the
+        // model; the sound stays
+        boolean full = state.isCollisionShapeFullBlock(level, hit.getBlockPos());
+        for (BulletRules.Particle part : full ? fx.particles() : java.util.List.<BulletRules.Particle>of()) {
             if (part.id().equalsIgnoreCase("block") && byRenderer) {
                 if (!looked) {
                     looked = true;
