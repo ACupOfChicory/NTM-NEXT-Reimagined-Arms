@@ -1202,7 +1202,12 @@ public final class Tracers {
             ny = -ny;
             nz = -nz;
         }
-        float bx = (float) (pos.x - cam.x) + nx * 0.002F, by = (float) (pos.y - cam.y) + ny * 0.002F, bz = (float) (pos.z - cam.z) + nz * 0.002F;
+        // on the faces themselves, only pulled towards the camera along each vertex's own line of sight (a tenth of a
+        // percent of the distance): it stays on the same screen pixels, so the parts on two faces of an edge still
+        // meet, yet lies in front of the face (a two-sided hole on bars seen from behind). Lifted along the normal
+        // instead, each face's part stood off its face and an edge showed a strip of the block between them
+        float bx = (float) (pos.x - cam.x), by = (float) (pos.y - cam.y), bz = (float) (pos.z - cam.z);
+        final float toward = 0.999F;
         int color = (alpha << 24) | 0xFFFFFF;
         int k = 3;
         while (k < m.length) {
@@ -1213,7 +1218,7 @@ public final class Tracers {
                 int[] idx = {0, i, i + 1, Math.min(i + 2, n - 1)};
                 for (int j : idx) {
                     int o = base + j * 5;
-                    vc.addVertex(p, bx + m[o], by + m[o + 1], bz + m[o + 2]).setColor(color).setUv(m[o + 3], m[o + 4])
+                    vc.addVertex(p, (bx + m[o]) * toward, (by + m[o + 1]) * toward, (bz + m[o + 2]) * toward).setColor(color).setUv(m[o + 3], m[o + 4])
                             .setOverlay(OverlayTexture.NO_OVERLAY).setLight(light).setNormal(p, nx, ny, nz);
                 }
             }
