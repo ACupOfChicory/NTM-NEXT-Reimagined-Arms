@@ -902,19 +902,13 @@ public final class Tracers {
         return true;
     }
 
-    // at most holeMax shots' holes (one shot may leave several: over an edge, over a door's leaf and frame)
+    // at most holeMax holes: the oldest shots' holes go first, a shot's holes all together (one shot may leave
+    // several: over an edge, over a door's leaf and frame)
     private static void trimHoles() {
-        int shots = 0;
-        long last = Long.MIN_VALUE;
-        for (Hole h : HOLES) if (h.born() != last) {
-            shots++;
-            last = h.born();
-        }
         int max = Math.max(1, Config.holeMax);
-        while (shots > max && !HOLES.isEmpty()) {
+        while (HOLES.size() > max) {
             long first = HOLES.peekFirst().born();
             while (!HOLES.isEmpty() && HOLES.peekFirst().born() == first) HOLES.removeFirst();
-            shots--;
         }
     }
 

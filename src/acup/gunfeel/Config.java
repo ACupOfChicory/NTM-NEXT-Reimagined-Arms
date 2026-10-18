@@ -14,7 +14,7 @@ public final class Config {
     public static boolean enabled = true;
     public static boolean tracers = true, bulletHoles = true;
     public static float tracerLength = 8F, tracerWidth = 0.02F, holeLife = 30F, holeSize = 0.28F, scorchSize = 0.9F;
-    public static int holeMax = 200;
+    public static int holeMax = 500;
     // blocks whose holes follow only the hitbox, not the texture's see-through pixels ("*" = any letters)
     public static String holeHitboxBlocks = "*glass*";
     // Hip-fire X position of the gun relative to NTM's: 1 = NTM default, 0 = screen centre.
@@ -113,7 +113,7 @@ public final class Config {
             NTM Gun Feel. Saved values are re-read while the game runs.
             tracers: thin tracers in the NTM bullet's colours instead of NTM's wide ribbon (needs the mod on the server)
             tracerLength, tracerWidth: tracer length and half width, blocks
-            bulletHoles: holes where bullets hit blocks; holeLife seconds, holeMax at most, holeSize blocks;
+            bulletHoles: holes where bullets hit blocks; holeLife seconds, holeMax holes at most (the oldest shots' go first), holeSize blocks;
               scorchSize: the soot mark of explosive / incendiary bullets instead of a hole, blocks
               holes are cut to the hitbox and to the block's visible pixels; blocks drawn without a block model
               (machines) get none. holeHitboxBlocks: block ids, comma separated, "*" = any letters, whose holes are
