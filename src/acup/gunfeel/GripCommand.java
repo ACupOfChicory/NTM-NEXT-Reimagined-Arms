@@ -51,6 +51,12 @@ public final class GripCommand {
                         })))
                 .then(Commands.literal("settings").executes(GripCommand::settings))
                 .then(Commands.literal("meshdump").executes(c -> RenderedMesh.dump(c.getSource())))
+                .then(Commands.literal("armdebug").executes(c -> {
+                    Arms.debugArms = !Arms.debugArms;
+                    boolean on = Arms.debugArms;
+                    c.getSource().sendSuccess(() -> Component.literal(on ? "Отладка рук включена: каждый кадр пишется в лог ([armdebug])" : "Отладка рук выключена"), false);
+                    return 1;
+                }))
                 .then(Commands.literal("holedebug").executes(c -> {
                     Tracers.debugHoles = !Tracers.debugHoles;
                     PassableClip.debug = Tracers.debugHoles;

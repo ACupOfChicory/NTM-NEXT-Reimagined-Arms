@@ -392,6 +392,7 @@ public final class Arms {
                     right ? Config.armDirRight : Config.armDirLeft, right ? Config.armReachRight : Config.armReachLeft);
             if (!r.valid) continue;
             if (atRest) {
+                branch = "rest";
                 submit(collector, light, arm, skin, new Matrix4f(CAMERA).mul(r.local), r.crop, right, slim, sleeveShown, sleeve);
                 continue;
             }
@@ -445,9 +446,11 @@ public final class Arms {
                 Matrix4f m = pose(right, slim, p, null, geometry.fraction(grip[i][2]), bodyInCamera, off, p, false,
                         new Quaternionf(), 0F, mix);
                 rollNow = Float.NaN;
+                branch = "path w=" + fmt(onPath[0]);
                 submit(collector, light, arm, skin, new Matrix4f(CAMERA).mul(m), lastCrop, right, slim, sleeveShown, sleeve);
                 continue;
             }
+            if (debugArms) branchNote = "carry " + (carryState(i) == null ? "none" : "w=" + fmt(carryState(i)[0])) + " follow=" + HAVE_FOLLOW[2 + i];
             // A hand leaves the gun to carry something NTM animates (shells into the chambers or the tube) and comes back.
             float[] carried = carryState(i);
             if (carried != null && HAVE_FOLLOW[2 + i]) {
@@ -497,6 +500,7 @@ public final class Arms {
                     float ang = (float) Math.toRadians(-turn * carried[0]);
                     m = new Matrix4f().translate(at).rotate(ang, axis).translate(new Vector3f(at).negate()).mul(m);
                 }
+                branch = "carry w=" + fmt(carried[0]) + " at=" + fmt(at);
                 submit(collector, light, arm, skin, new Matrix4f(CAMERA).mul(m), lastCrop, right, slim, sleeveShown, sleeve);
                 continue;
             }
@@ -507,6 +511,7 @@ public final class Arms {
                 float[] m = right ? Config.armReleaseMoveRight : Config.armReleaseMove;
                 float k = (0.5F - 0.5F * (float) Math.cos(2.0 * Math.PI * release)) / 16F * r.s;
                 Matrix4f moved = new Matrix4f().translate(m[0] * k, m[1] * k, m[2] * k).mul(r.local);
+                branch = "release " + fmt(release);
                 submit(collector, light, arm, skin, new Matrix4f(CAMERA).mul(moved), r.crop, right, slim, sleeveShown, sleeve);
                 continue;
             }
@@ -556,6 +561,7 @@ public final class Arms {
                     if (!Config.armAroundSmooth) {
                         // back under the gun (e.g. as it is flicked up to close) the hand slides along it like at rest
                         boolean under = Math.abs(around + 90F) < 0.5F;
+                        branch = "around " + fmt(around);
                         arm(collector, light, arm, skin, slim, right, g, under ? profiles(item)[i] : null, gripF, holder, out, g, false,
                                 new Quaternionf(), 0F, axisPoint, r, sleeveShown, sleeve);
                         continue;
@@ -574,13 +580,27 @@ public final class Arms {
                         m = blend(m, usual, w);
                         if (w > 0.5F) crop = lastCrop;
                     }
+                    branch = "around smooth " + fmt(around);
                     submit(collector, light, arm, skin, new Matrix4f(CAMERA).mul(m), crop, right, slim, sleeveShown, sleeve);
                     continue;
                 }
             }
+            branch = "hold g=" + fmt(g0) + " spin=" + spin;
             arm(collector, light, arm, skin, slim, right, g0, path, gripF, bodyInCamera, down, center, spin, own,
                     drop, axisPoint, r, sleeveShown, sleeve);
         }
+    }
+
+    // /gunfeel armdebug: every frame, how each arm was placed, to the log ("[armdebug]")
+    public static boolean debugArms;
+    private static String branch = "", branchNote = "";
+
+    private static String fmt(float v) {
+        return String.format(java.util.Locale.ROOT, "%.3f", v);
+    }
+
+    private static String fmt(Vector3f v) {
+        return String.format(java.util.Locale.ROOT, "(%.3f %.3f %.3f)", v.x, v.y, v.z);
     }
 
     private static final String[] keysSource = new String[2];
@@ -1160,6 +1180,15 @@ public final class Arms {
 
     private static void submit(SubmitNodeCollector collector, int light, ModelPart arm, Identifier skin, Matrix4f m,
             int crop, boolean right, boolean slim, boolean sleeveShown, ModelPart sleeve) {
+        if (debugArms) {
+            GunAnimation type = HbmAnimations.getGunAnimation(0);
+            Vector3f hand = m.transformPosition(new Vector3f());
+            Vector3f along = m.transformDirection(new Vector3f(0F, 1F, 0F));
+            GunFeel.LOGGER.info("[armdebug] {} {} t={} {} | {} | origin={} up={} crop={}", right ? "R" : "L",
+                    HbmAnimations.getRelevantAnim(0) == null ? "-" : type, fmt(animMillis()), branch, right ? "" : branchNote,
+                    fmt(hand), fmt(along), crop);
+            branchNote = "";
+        }
         PoseStack pose = new PoseStack();
         pose.mulPose(m);
         if (crop < 12) {
