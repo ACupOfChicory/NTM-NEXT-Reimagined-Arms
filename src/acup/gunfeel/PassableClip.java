@@ -47,6 +47,7 @@ public final class PassableClip extends ClipContext {
         // (scaffolding has none unless you stand on it). A shell (door, trapdoor) keeps its hitbox: see clip().
         long[] vox = shape(state);
         if (vox != null && !shell(vox)) return Shapes.block();
+        if (level instanceof Level l && Structures.cells(l, pos, state) != null) return Shapes.block();
         return super.getBlockShape(state, level, pos);
     }
 
@@ -58,7 +59,14 @@ public final class PassableClip extends ClipContext {
             if (hit.getType() == HitResult.Type.MISS) return hit;
             BlockState state = level.getBlockState(hit.getBlockPos());
             long[] vox = shape(state);
-            if (vox != null) {
+            long[] cells = vox == null ? Structures.cells(level, hit.getBlockPos(), state) : null;
+            if (cells != null) {
+                // a block of a big model (NTM's cargo door): its cells as drawn, then its solid parts (an elevator's
+                // platform) as NTM has them
+                BlockHitResult in = march(cells, hit, to.subtract(from), 64);
+                if (in == null) in = Structures.solid(level, hit.getBlockPos(), state, from, to);
+                if (in != null) return in;
+            } else if (vox != null) {
                 // a shell (its model closes the hitbox all round: a door, a trapdoor, a lantern) is decided where the
                 // bullet comes in, as a mask block is: a shown pixel stops it there, a see-through one lets it through
                 // the whole block (not onto its far inner face, seen through the window). Already inside it (came in
@@ -134,6 +142,19 @@ public final class PassableClip extends ClipContext {
         loadShapes();
         SHAPES.putAll(shapes);
         SHAPE_OF.clear();
+        Structures.clear();
+    }
+
+    // the cells under a key (block shapes and the cells of big models: see Structures)
+    static synchronized long @org.jspecify.annotations.Nullable [] byKey(String key) {
+        loadShapes();
+        return SHAPES.get(key);
+    }
+
+    // every key and its cells now known (the jar's, the config's, this client's)
+    public static synchronized Map<String, long[]> all() {
+        loadShapes();
+        return new java.util.TreeMap<>(SHAPES);
     }
 
     private static synchronized void loadShapes() {
@@ -226,7 +247,7 @@ public final class PassableClip extends ClipContext {
 
     // From where the bullet enters the block's hitbox, along its way, to the first set cell: the hit there, or null
     // when it leaves the block without meeting one.
-    private static BlockHitResult march(long[] bits, BlockHitResult hit, Vec3 way, int cells) {
+    static BlockHitResult march(long[] bits, BlockHitResult hit, Vec3 way, int cells) {
         BlockPos pos = hit.getBlockPos();
         double len = way.length();
         if (len < 1e-9) return hit;

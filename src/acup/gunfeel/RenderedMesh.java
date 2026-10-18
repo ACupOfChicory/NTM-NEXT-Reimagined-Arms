@@ -249,6 +249,14 @@ public final class RenderedMesh {
         return out;
     }
 
+    // the triangles this block entity's renderer draws now (none: no renderer, or it could not be read)
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    public static List<Tri> of(BlockEntity be) {
+        BlockEntityRenderer renderer = Minecraft.getInstance().getBlockEntityRenderDispatcher().getRenderer(be);
+        if (renderer == null || FAILED.contains(renderer.getClass())) return List.of();
+        return capture(be, renderer);
+    }
+
     // true while a renderer is run here: NTM's hasVisual answers no, so its renderer draws what Flywheel would (the
     // press head, at its height)
     // (only on the thread reading it: Flywheel may ask from its own threads meanwhile)
