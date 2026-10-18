@@ -78,6 +78,11 @@ public final class RenderedMesh {
         default double @Nullable [] grid() {
             return null;
         }
+
+        // glass: holes cover it whole, and what lies behind it shows through (its holes are drawn after the glass)
+        default boolean glass() {
+            return false;
+        }
     }
 
     public static final Tex OPAQUE = new Tex() {
@@ -87,6 +92,21 @@ public final class RenderedMesh {
 
         public boolean seeThrough() {
             return false;
+        }
+    };
+
+    // glass (a glass block, a door's window of clear pixels): taken as solid, so holes stay on it
+    public static final Tex GLASS_TEX = new Tex() {
+        public boolean opaque(float u, float v) {
+            return true;
+        }
+
+        public boolean seeThrough() {
+            return false;
+        }
+
+        public boolean glass() {
+            return true;
         }
     };
 
@@ -796,7 +816,8 @@ public final class RenderedMesh {
 
     private static Tex texOf(RenderType type) {
         Identifier loc = textureOf(type);
-        if (loc == null || GLASS.contains(loc.toString())) return OPAQUE;
+        if (loc == null) return OPAQUE;
+        if (GLASS.contains(loc.toString())) return GLASS_TEX;
         return TEXTURES.computeIfAbsent(loc, RenderedMesh::load);
     }
 

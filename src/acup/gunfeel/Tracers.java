@@ -470,7 +470,8 @@ public final class Tracers {
         double onAxis = Double.isNaN(plane) ? comp(hit.getLocation(), hit.getDirection().getAxis().ordinal()) : plane;
         boolean cull = (level.getBlockState(hit.getBlockPos()).isCollisionShapeFullBlock(level, hit.getBlockPos()) || Math.abs(onAxis - boxFace) < 1e-3)
                 && !glassLike(level.getBlockState(hit.getBlockPos()));
-        HOLES.addLast(new Hole(hit.getLocation(), hit.getDirection(), (int) (Math.random() * 8), System.nanoTime(), light, kind, size, rect, mask, plane, translucent(level.getBlockState(hit.getBlockPos())),
+        HOLES.addLast(new Hole(hit.getLocation(), hit.getDirection(), (int) (Math.random() * 8), System.nanoTime(), light, kind, size, rect, mask, plane,
+                translucent(level.getBlockState(hit.getBlockPos())) || glassLike(level.getBlockState(hit.getBlockPos())),
                 cull, null, false, hit.getBlockPos().immutable(), level.getBlockState(hit.getBlockPos()), false, null, null));
         trimHoles();
     }
@@ -561,7 +562,8 @@ public final class Tracers {
         }
         Vec3 world = new Vec3(pos.getX() + at.x, pos.getY() + at.y, pos.getZ() + at.z);
         int light = LightCoordsUtil.getLightCoords(level, pos);
-        HOLES.addLast(new Hole(world, hit.getDirection(), turn, System.nanoTime(), light, kind, size, null, null, Double.NaN, false, false, mesh,
+        HOLES.addLast(new Hole(world, hit.getDirection(), turn, System.nanoTime(), light, kind, size, null, null, Double.NaN,
+                translucent(level.getBlockState(pos)) || glassLike(level.getBlockState(pos)), false, mesh,
                 onBoxFace(level, pos, at, normal) && !glassLike(level.getBlockState(pos)), pos.immutable(), level.getBlockState(pos), false, null, null));
         trimHoles();
     }
@@ -621,7 +623,7 @@ public final class Tracers {
         for (int i = 0; i < tris.size(); i++) {
             RenderedMesh.Tri t = tris.get(i);
             if (t.block() == null || !whole.computeIfAbsent(t.block(), b -> hitboxOnly(level.getBlockState(b)))) continue;
-            RenderedMesh.Tri c = new RenderedMesh.Tri(t.p(), t.uv(), RenderedMesh.OPAQUE, t.oneSided(), t.moving(), t.anchor(), t.block());
+            RenderedMesh.Tri c = new RenderedMesh.Tri(t.p(), t.uv(), RenderedMesh.GLASS_TEX, t.oneSided(), t.moving(), t.anchor(), t.block());
             if (plain.remove(t)) plain.add(c);
             tris.set(i, c);
         }
@@ -782,7 +784,8 @@ public final class Tracers {
             // seen only from in front, like the face, unless the face is a thin sheet drawn from both sides (bars) or
             // glass: through glass its far side's holes show
             boolean front = first.oneSided() && !backed(near, g) && !(first.block() != null && glassLike(state));
-            boolean late = first.block() != null && translucent(state);
+            // on glass (a glass block, a door's clear window): drawn after the glass behind it, see HoleRender
+            boolean late = first.tex().glass() || first.block() != null && (translucent(state) || glassLike(state));
             Follow follow = first.anchor() == null ? null : new Follow(first.anchor(), at, mesh, light);
             HOLES.addLast(new Hole(new Vec3(at.x, at.y, at.z), hit.getDirection(), turn, born, light, kind, size, null, null, Double.NaN, late, false, mesh,
                     front, on.immutable(), state, first.moving() && first.anchor() == null, follow, hitAt));
@@ -1504,10 +1507,14 @@ public final class Tracers {
                     }
                 }
             };
-            if (late && event.getSubmitNodeCollector() instanceof net.minecraft.client.renderer.SubmitNodeStorage storage)
-                storage.order(-1).submitCustomGeometry(event.getPoseStack(), type, draw);
-            else
+            if (late && event.getSubmitNodeCollector() instanceof net.minecraft.client.renderer.SubmitNodeStorage storage) {
+                // then their solid middles once more, into the depth only (after every hole's colour, so holes never
+                // hide each other): clouds and rain drawn later stay behind them
+                storage.order(-2).submitCustomGeometry(event.getPoseStack(), type, draw);
+                storage.order(-1).submitCustomGeometry(event.getPoseStack(), HoleRender.depthType(TEXTURES[kind], cull), draw);
+            } else {
                 event.getSubmitNodeCollector().submitCustomGeometry(event.getPoseStack(), type, draw);
+            }
         }
     }
 
