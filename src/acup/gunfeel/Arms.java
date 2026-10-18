@@ -500,8 +500,23 @@ public final class Arms {
                     float ang = (float) Math.toRadians(-turn * carried[0]);
                     m = new Matrix4f().translate(at).rotate(ang, axis).translate(new Vector3f(at).negate()).mul(m);
                 }
-                branch = "carry w=" + fmt(carried[0]) + " at=" + fmt(at);
-                submit(collector, light, arm, skin, new Matrix4f(CAMERA).mul(m), lastCrop, right, slim, sleeveShown, sleeve);
+                int crop = lastCrop;
+                // armCarryBlend (per gun): from the hand's usual hold (sliding along a lifted gun) into carrying, so
+                // the first frame of carrying does not jump to the bare grip point
+                if (Config.armCarryBlend && carried[0] < 1F) {
+                    Matrix4f hold = HAVE_FOLLOW[i] ? new Matrix4f(cameraInv).mul(FOLLOW[i]) : bodyInCamera;
+                    Vector3f hg = hold.transformPosition(grip[i][0], grip[i][1], grip[i][2], new Vector3f());
+                    Vector3f hc = hold.transformPosition(grip[i + 2][0], grip[i + 2][1], grip[i + 2][2], new Vector3f());
+                    Quaternionf hown = new Quaternionf().slerp(twist, right ? followRight : followLeft).normalize();
+                    if (!Float.isFinite(hown.x + hown.y + hown.z + hown.w)) hown.identity();
+                    Matrix4f usual = pose(right, slim, hg, HAVE_FOLLOW[i] ? null : profiles(item)[i], geometry.fraction(grip[i][2]), bodyInCamera,
+                            down, hc, !right && !inspect, hown, 0F, r);
+                    float w = carried[0];
+                    m = blend(usual, m, w);
+                    if (w < 0.5F) crop = lastCrop;
+                }
+                branch = "carry w=" + fmt(carried[0]) + " at=" + fmt(at) + (Config.armCarryBlend ? " blend" : "");
+                submit(collector, light, arm, skin, new Matrix4f(CAMERA).mul(m), crop, right, slim, sleeveShown, sleeve);
                 continue;
             }
             // A hand lets go while the gun spins (sawn-off Maresleg cocking, Henry inspect): it keeps its rest pose,
@@ -1157,6 +1172,22 @@ public final class Arms {
         Vector3f hand = handAtGrip;
         if (Config.armSlide && path != null && handAtGrip.distance(shoulder) > limit) {
             float lo = Math.min(Config.armSlideTo, gripF), hi = gripF;
+            if (Config.armSlideNearest) {
+                // armSlideNearest (per gun): the first point from the grip on that the arm reaches, stepping along the
+                // gun; halving the whole stretch could land far from the grip when the distance is not monotonic
+                // (Henry being lifted: the right hand jumped down the stock in one frame)
+                float prev = hi, found = lo;
+                for (int k = 1; k <= 64; k++) {
+                    float f = hi + (lo - hi) * k / 64F;
+                    if (onPath(path, f, bodyInCamera, off).distance(shoulder) <= limit) {
+                        found = f;
+                        break;
+                    }
+                    prev = f;
+                }
+                lo = found;
+                hi = prev;
+            }
             for (int k = 0; k < 16; k++) {
                 float mid = (lo + hi) * 0.5F;
                 if (onPath(path, mid, bodyInCamera, off).distance(shoulder) > limit) hi = mid;

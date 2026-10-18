@@ -99,6 +99,8 @@ public final class Config {
     // draw NTM's muzzle smoke rising up the screen whatever frame the renderer gives it (SPAS-12 sends it at the camera)
     public static boolean smokeUpright = false;
     public static boolean armAroundSmooth = false;
+    public static boolean armCarryBlend = false;
+    public static boolean armSlideNearest = false;
     public static float armAroundTopDrop = 0F;
     public static float armAroundShift = 0F;
     public static float armCarryTurnRight = 0F;
@@ -148,6 +150,8 @@ public final class Config {
             armAroundShift: while armLeftKeys moves the left hand round a part, move it left (out of the part) by this many arm pixels; none under the part (-90)
             armAroundShiftReload, armAroundTopDropReload: the same during reloads, NaN = armAroundShift / armAroundTopDrop
             armCarryTurnRight, armCarryTurnLeft: while a hand carries a shell, turn the arm around that point about the shell's long axis, degrees, + = the shoulder end to the right
+            armSlideNearest: a hand sliding along the gun (armSlide) stops at the reachable point nearest its grip, stepping along the gun (Henry)
+            armCarryBlend: a hand starting to carry (armLeftCarry / armRightCarry) leaves from its usual hold, blended by the carry weight (Henry: the gun is lifted when the hand leaves)
             armAroundSmooth: while armLeftKeys moves the left hand round a part, keep the arm's length and blend into the usual hold below -45 (Liberator)
             smokeWidth: width of the muzzle smoke, 1 = as NTM draws it
             smokeUpright: draw the muzzle smoke rising up the screen, for guns whose smoke goes the wrong way (SPAS-12)
@@ -345,6 +349,8 @@ public final class Config {
         armLoadRollRight = num(p, "armLoadRollRight", armLoadRollRight);
         armLoadRollLeft = num(p, "armLoadRollLeft", armLoadRollLeft);
         armAroundSmooth = bool(p, "armAroundSmooth", armAroundSmooth);
+        armCarryBlend = bool(p, "armCarryBlend", armCarryBlend);
+        armSlideNearest = bool(p, "armSlideNearest", armSlideNearest);
         armAroundTopDrop = num(p, "armAroundTopDrop", armAroundTopDrop);
         armAroundShift = num(p, "armAroundShift", armAroundShift);
         armCarryTurnRight = num(p, "armCarryTurnRight", armCarryTurnRight);
@@ -442,6 +448,8 @@ public final class Config {
         p.setProperty("armLoadRollRight", Float.toString(armLoadRollRight));
         p.setProperty("armLoadRollLeft", Float.toString(armLoadRollLeft));
         p.setProperty("armAroundSmooth", Boolean.toString(armAroundSmooth));
+        p.setProperty("armCarryBlend", Boolean.toString(armCarryBlend));
+        p.setProperty("armSlideNearest", Boolean.toString(armSlideNearest));
         p.setProperty("armAroundTopDrop", Float.toString(armAroundTopDrop));
         p.setProperty("armAroundShift", Float.toString(armAroundShift));
         p.setProperty("armCarryTurnRight", Float.toString(armCarryTurnRight));
