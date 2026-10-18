@@ -46,7 +46,9 @@ public abstract class MixinThrowableHit {
             target = "Lnet/minecraft/world/level/Level;clip(Lnet/minecraft/world/level/ClipContext;)Lnet/minecraft/world/phys/BlockHitResult;"))
     private BlockHitResult gunfeel$blocks(Level level, ClipContext context) {
         if (!((Object) this instanceof EntityBulletBaseMK4)) return level.clip(context);
-        return PassableClip.clip(level, context.getFrom(), context.getTo());
+        EntityBulletBaseMK4 bullet = (EntityBulletBaseMK4) (Object) this;
+        if (level.isClientSide()) return PassableClip.clip(level, context.getFrom(), context.getTo());
+        return PassableClip.clip(level, context.getFrom(), context.getTo(), hit -> acup.gunfeel.BulletServer.passed(bullet, hit));
     }
 
     @Unique

@@ -83,6 +83,11 @@ public final class RenderedMesh {
         default boolean glass() {
             return false;
         }
+
+        // the pixel's colour, ARGB (0 = not known): bullet crumbs on a model drawn with its own texture
+        default int color(float u, float v) {
+            return 0;
+        }
     }
 
     public static final Tex OPAQUE = new Tex() {
@@ -859,10 +864,13 @@ public final class RenderedMesh {
     private static Tex image(NativeImage img) {
         int w = img.getWidth(), h = img.getHeight();
         boolean[] shown = new boolean[w * h];
+        int[] argb = new int[w * h];
         boolean any = false;
         for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
-            boolean s = (img.getPixel(x, y) >>> 24) >= CLEAR;
+            int px = img.getPixel(x, y);
+            boolean s = (px >>> 24) >= CLEAR;
             shown[y * w + x] = s;
+            argb[y * w + x] = px;
             any |= !s;
         }
         boolean clear = any;
@@ -870,6 +878,11 @@ public final class RenderedMesh {
             public boolean opaque(float u, float v) {
                 int x = Math.floorMod((int) Math.floor(u * w), w), y = Math.floorMod((int) Math.floor(v * h), h);
                 return shown[y * w + x];
+            }
+
+            public int color(float u, float v) {
+                int x = Math.floorMod((int) Math.floor(u * w), w), y = Math.floorMod((int) Math.floor(v * h), h);
+                return argb[y * w + x];
             }
 
             public boolean seeThrough() {

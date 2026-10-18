@@ -52,17 +52,33 @@ public final class BulletServer {
         BlockState state = level.getBlockState(pos);
         if (state.isAir()) return 0;
         BulletRules.Break rule = BulletRules.breakRule(state);
-        if (rule == null) return 0;
+        if (rule == null || rule.mode() == 0) return 0;
+        if (!wear(level, bullet, pos, state, rule)) return 0;
+        return rule.pass() ? 2 : 1;
+    }
+
+    // the bullet flew through a block it always flies through ("through"): counts as a hit on it
+    public static void passed(EntityBulletBaseMK4 bullet, BlockHitResult hit) {
+        if (!(bullet.level() instanceof ServerLevel level)) return;
+        BlockPos pos = hit.getBlockPos().immutable();
+        BlockState state = level.getBlockState(pos);
+        BulletRules.Break rule = BulletRules.breakRule(state);
+        if (rule == null || rule.mode() == 0) return;
+        wear(level, bullet, pos, state, rule);
+    }
+
+    // one hit on the block by its rule: true when it broke
+    private static boolean wear(ServerLevel level, EntityBulletBaseMK4 bullet, BlockPos pos, BlockState state, BulletRules.Break rule) {
         float hardness = state.getDestroySpeed(level, pos);
-        if (hardness < 0F) return 0; // bedrock and the like
+        if (hardness < 0F) return false; // bedrock and the like
         Entity owner = bullet.getOwner();
         if (owner instanceof ServerPlayer player) {
-            if (!player.mayBuild()) return 0;
+            if (!player.mayBuild()) return false;
             BreakBlockEvent event = new BreakBlockEvent(level, pos, state, player);
             NeoForge.EVENT_BUS.post(event);
-            if (event.isCanceled()) return 0;
+            if (event.isCanceled()) return false;
         } else if (!level.getGameRules().get(GameRules.MOB_GRIEFING)) {
-            return 0;
+            return false;
         }
         long now = System.currentTimeMillis();
         forget(level, now);
@@ -74,7 +90,7 @@ public final class BulletServer {
             if (need > 0F && done < need) {
                 WEAR.put(pos, new Wear(done, now));
                 level.destroyBlockProgress(crackId(pos), pos, Math.min(9, (int) (done / need * 10F)));
-                return 0;
+                return false;
             }
             WEAR.remove(pos);
             level.destroyBlockProgress(crackId(pos), pos, -1);
@@ -84,7 +100,7 @@ public final class BulletServer {
             BlockState with = parse(level, rule.replace());
             if (with != null) level.setBlock(pos, with, 3);
         }
-        return rule.pass() ? 2 : 1;
+        return true;
     }
 
     private static void forget(ServerLevel level, long now) {

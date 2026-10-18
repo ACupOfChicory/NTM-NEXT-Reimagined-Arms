@@ -44,7 +44,21 @@ public final class BulletFx {
         Vec3 out = dir.subtract(n.scale(2 * dir.dot(n))).normalize();
         RandomSource r = level.getRandom();
         Vec3 p0 = at.add(n.scale(0.02));
+        Crumbs drawn = null;
         for (BulletRules.Particle part : fx.particles()) {
+            if (part.id().equalsIgnoreCase("block") && noParticleTexture(state)) {
+                // a block drawn by its renderer (NTM's machines) has no texture for crumbs (they show the purple and
+                // black "missing" squares): crumbs of the colour its model has where the bullet hit
+                if (drawn == null) drawn = Crumbs.at(level, at, n);
+                if (drawn != null) {
+                    for (int i = 0; i < part.count(); i++) {
+                        double sp = 0.05 + r.nextDouble() * 0.15;
+                        drawn.spawn(level, p0, (out.x + r.nextGaussian() * 0.35) * sp, (out.y + r.nextGaussian() * 0.35) * sp + 0.03,
+                                (out.z + r.nextGaussian() * 0.35) * sp);
+                    }
+                }
+                continue;
+            }
             ParticleOptions o = BulletServer.particle(part.id(), state);
             if (o == null) continue;
             for (int i = 0; i < part.count(); i++) {
@@ -58,6 +72,56 @@ public final class BulletFx {
         SoundEvent e = s.id().equalsIgnoreCase("block") ? state.getSoundType().getHitSound() : event(s.id());
         if (e == null) return;
         level.playLocalSound(at.x, at.y, at.z, e, SoundSource.PLAYERS, s.volume(), s.pitch() * (0.9F + r.nextFloat() * 0.2F), false);
+    }
+
+    private static final java.util.Map<BlockState, Boolean> NO_TEXTURE = new java.util.IdentityHashMap<>();
+
+    private static boolean noParticleTexture(BlockState state) {
+        return NO_TEXTURE.computeIfAbsent(state, st -> {
+            try {
+                var sprite = Minecraft.getInstance().getModelManager().getBlockStateModelSet().getParticleMaterial(st).sprite();
+                return sprite == null || sprite.contents().name().equals(net.minecraft.client.renderer.texture.MissingTextureAtlasSprite.getLocation());
+            } catch (Exception e) {
+                return true;
+            }
+        });
+    }
+
+    // the drawn model under a hit point: its texture there, to take the crumbs' colours from
+    private record Crumbs(RenderedMesh.Tri tri, float u, float v, double du, double dv) {
+        static @Nullable Crumbs at(ClientLevel level, Vec3 at, Vec3 n) {
+            org.joml.Vector3d pt = new org.joml.Vector3d(at.x, at.y, at.z);
+            Crumbs best = null;
+            double bestD = 0.03;
+            for (RenderedMesh.Tri t : RenderedMesh.within(level, new net.minecraft.world.phys.AABB(at, at).inflate(0.05))) {
+                org.joml.Vector3d tn = t.normal();
+                if (tn == null) continue;
+                double d = Math.abs(tn.dot(new org.joml.Vector3d(pt).sub(t.corner(0))));
+                if (d >= bestD) continue;
+                double[] w = t.weights(pt, 1e-3);
+                if (w == null || !t.opaqueAt(w)) continue;
+                float u = (float) (w[0] * t.uv()[0] + w[1] * t.uv()[2] + w[2] * t.uv()[4]);
+                float v = (float) (w[0] * t.uv()[1] + w[1] * t.uv()[3] + w[2] * t.uv()[5]);
+                if (t.tex().color(u, v) == 0) continue;
+                double[] g = t.tex().grid();
+                bestD = d;
+                best = new Crumbs(t, u, v, g == null ? 0.01 : g[1], g == null ? 0.01 : g[3]);
+            }
+            return best;
+        }
+
+        // one crumb: a pixel near the hit (up to 2 pixels off), shaded as block crumbs are
+        void spawn(ClientLevel level, Vec3 p, double vx, double vy, double vz) {
+            RandomSource r = level.getRandom();
+            int c = 0;
+            for (int i = 0; i < 4 && (c >>> 24) < 26; i++)
+                c = tri.tex().color(u + (float) ((r.nextInt(5) - 2) * du), v + (float) ((r.nextInt(5) - 2) * dv));
+            if ((c >>> 24) < 26) c = tri.tex().color(u, v);
+            var particle = new net.minecraft.client.particle.TerrainParticle(level, p.x, p.y, p.z, vx, vy, vz,
+                    net.minecraft.world.level.block.Blocks.SNOW_BLOCK.defaultBlockState());
+            particle.setColor(0.6F * ((c >> 16) & 255) / 255F, 0.6F * ((c >> 8) & 255) / 255F, 0.6F * (c & 255) / 255F);
+            Minecraft.getInstance().particleEngine.add(particle);
+        }
     }
 
     // a stretch a bullet flew this frame, a..b: it whizzes when it passed within the rule's radius of the player's eyes

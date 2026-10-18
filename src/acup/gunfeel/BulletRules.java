@@ -35,7 +35,7 @@ public final class BulletRules {
     public static final String FILE = "ntm-gunfeel-bullets.txt";
 
     // break: how a block gives way. mode: 0 never, 1 instant, 2 after `amount` hits, 3 after `amount` x hardness damage
-    public record Break(int mode, float amount, boolean drop, boolean pass, @Nullable String replace) {
+    public record Break(int mode, float amount, boolean drop, boolean pass, boolean through, @Nullable String replace) {
     }
 
     // a particle: "block" (the hit block's crack), "block:<id>" (that block's crack) or a plain particle id
@@ -222,15 +222,37 @@ public final class BulletRules {
                     // keep 1
                 }
             }
-            boolean drop = false, pass = false;
+            boolean drop = false, pass = false, through = false;
             for (String s : w) {
                 if (s.equals("drop")) drop = true;
                 if (s.equals("pass")) pass = true;
+                if (s.equals("through")) through = true;
             }
-            out = mode == 0 ? null : new Break(mode, amount, drop, pass, r.opts().get("replace"));
+            out = mode == 0 && !through ? null : new Break(mode, amount, drop, pass || through, through, r.opts().get("replace"));
         }
         BREAKS.put(state, java.util.Optional.ofNullable(out));
         return out;
+    }
+
+    // bullets always fly through it (a "break ... through" rule); it still counts the hits and breaks by its rule
+    public static boolean through(BlockState state) {
+        if (!anyThrough()) return false;
+        Break b = breakRule(state);
+        return b != null && b.through();
+    }
+
+    private static List<Rule> throughOf;
+    private static boolean anyThrough;
+
+    // some rule says "through" (else a bullet's path needs no walk through the blocks it passes)
+    public static synchronized boolean anyThrough() {
+        List<Rule> all = rules();
+        if (all != throughOf) {
+            throughOf = all;
+            anyThrough = false;
+            for (Rule r : all) if (r.kind().equals("break") && java.util.Arrays.asList(r.words()).contains("through")) anyThrough = true;
+        }
+        return anyThrough;
     }
 
     public static synchronized Effect hit(BlockState state) {
@@ -310,7 +332,8 @@ public final class BulletRules {
             # break <blocks> never | instant | hits <n> | damage <x> [drop] [pass] [replace=<block state>]
             #   damage <x>: breaks once the bullets' damage on it adds up to x times its hardness; hits and damage
             #   show the cracks and are forgotten 20 s after the last hit. drop = drops itself; pass = the bullet
-            #   flies on through the broken block. A player's bullet breaks only where that player could break
+            #   flies on through the broken block; through = bullets always fly through it (no hole, no stop), it still
+            #   counts the hits and breaks by its rule ("never through": flown through, never broken). A player's bullet breaks only where that player could break
             #   blocks (claims, spawn protection).
             # hit <blocks> [particles=<p>*<n>,...] [sound=<id>[/volume[/pitch]]]   (each player's own game)
             #   particle: block (the hit block's crumbs), block:<id> (that block's crumbs), a particle id

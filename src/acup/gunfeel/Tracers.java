@@ -415,7 +415,8 @@ public final class Tracers {
         Vec3 ra = s.checked == 0.0 && s.eye != null ? s.eye
                 : s.start.add(s.v.x * s.checked, s.v.y * s.checked - 0.5 * s.g * s.checked * s.checked, s.v.z * s.checked);
         Vec3 rb = s.start.add(s.v.x * t, s.v.y * t - 0.5 * s.g * t * t, s.v.z * t);
-        BlockHitResult block = PassableClip.clip(level, ra, rb);
+        List<BlockHitResult> through = new ArrayList<>();
+        BlockHitResult block = PassableClip.clip(level, ra, rb, through::add);
         double reach = block.getType() == HitResult.Type.MISS ? rb.distanceTo(ra) : block.getLocation().distanceTo(ra);
         Vec3 dir = rb.subtract(ra);
         double len = dir.length();
@@ -441,6 +442,11 @@ public final class Tracers {
             if (len > 1e-6) BulletFx.blockHit(level, block, dir.scale(1.0 / len));
         }
         if (!s.whizzed) s.whizzed = BulletFx.whizz(level, s.owner, ra, stop);
+        // blocks it flew through on the way (leaves): their crumbs, no hole
+        if (len > 1e-6) {
+            double far = stop.distanceToSqr(ra);
+            for (BlockHitResult h : through) if (h.getLocation().distanceToSqr(ra) < far) BulletFx.blockHit(level, h, dir.scale(1.0 / len));
+        }
         s.checked = t;
     }
 

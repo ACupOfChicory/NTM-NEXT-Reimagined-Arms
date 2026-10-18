@@ -42,7 +42,7 @@ public final class PassableClip extends ClipContext {
 
     @Override
     public VoxelShape getBlockShape(BlockState state, BlockGetter level, BlockPos pos) {
-        if (state.is(PASSABLE) || skip.contains(pos)) return Shapes.empty();
+        if (state.is(PASSABLE) || skip.contains(pos) || BulletRules.through(state)) return Shapes.empty();
         // a model inside its hitbox: only the model's cells stop a bullet (march), whatever the collision box
         // (scaffolding has none unless you stand on it). A shell (door, trapdoor) keeps its hitbox: see clip().
         long[] vox = shape(state);
@@ -61,6 +61,48 @@ public final class PassableClip extends ClipContext {
         if (debug && (r.getType() != HitResult.Type.MISS || !level.isClientSide()))
             org.slf4j.LoggerFactory.getLogger("ntm-gunfeel").info("[holedebug] {} clip {} -> {} {}", side(level), from, to,
                     r.getType() == HitResult.Type.MISS ? "flies on" : "stops at " + r.getBlockPos() + " " + r.getDirection() + " " + r.getLocation());
+        return r;
+    }
+
+    // as clip(), and every block the bullet always flies through (bullet rules "through") that it crossed before it
+    // stopped, entered from outside: one hit each (a path starting inside such a block does not count it again)
+    public static BlockHitResult clip(Level level, Vec3 from, Vec3 to, java.util.function.Consumer<BlockHitResult> passed) {
+        BlockHitResult r = clip(level, from, to);
+        if (!BulletRules.anyThrough()) return r;
+        Vec3 end = r.getType() == HitResult.Type.MISS ? to : r.getLocation();
+        Vec3 d = end.subtract(from);
+        double len = d.length();
+        if (len < 1e-6) return r;
+        BlockPos start = BlockPos.containing(from);
+        // the cells the segment crosses, in order (a grid walk)
+        int x = start.getX(), y = start.getY(), z = start.getZ();
+        int sx = d.x > 0 ? 1 : -1, sy = d.y > 0 ? 1 : -1, sz = d.z > 0 ? 1 : -1;
+        double tx = d.x == 0 ? Double.MAX_VALUE : ((sx > 0 ? x + 1 - from.x : from.x - x) / Math.abs(d.x));
+        double ty = d.y == 0 ? Double.MAX_VALUE : ((sy > 0 ? y + 1 - from.y : from.y - y) / Math.abs(d.y));
+        double tz = d.z == 0 ? Double.MAX_VALUE : ((sz > 0 ? z + 1 - from.z : from.z - z) / Math.abs(d.z));
+        double dx = d.x == 0 ? Double.MAX_VALUE : 1 / Math.abs(d.x), dy = d.y == 0 ? Double.MAX_VALUE : 1 / Math.abs(d.y),
+                dz = d.z == 0 ? Double.MAX_VALUE : 1 / Math.abs(d.z);
+        BlockPos.MutableBlockPos at = new BlockPos.MutableBlockPos();
+        for (int i = 0; i < 512; i++) {
+            if (tx <= ty && tx <= tz) {
+                if (tx > 1) break;
+                x += sx;
+                tx += dx;
+            } else if (ty <= tz) {
+                if (ty > 1) break;
+                y += sy;
+                ty += dy;
+            } else {
+                if (tz > 1) break;
+                z += sz;
+                tz += dz;
+            }
+            at.set(x, y, z);
+            BlockState state = level.getBlockState(at);
+            if (state.isAir() || !BulletRules.through(state)) continue;
+            BlockHitResult in = state.getShape(level, at).clip(from, end, at);
+            if (in != null) passed.accept(in);
+        }
         return r;
     }
 
