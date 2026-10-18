@@ -377,6 +377,29 @@ public final class MeshShapes {
         return Math.sqrt((a.x() - b.x()) * (a.x() - b.x()) + (a.y() - b.y()) * (a.y() - b.y()) + (a.z() - b.z()) * (a.z() - b.z()));
     }
 
+    private static java.lang.reflect.Field imageField;
+    private static boolean imageMissing;
+
+    // the sprite's pixel colour at atlas coordinates (u, v), ARGB (0 = not readable)
+    public static int color(TextureAtlasSprite sprite, float u, float v) {
+        if (imageMissing) return 0;
+        var contents = sprite.contents();
+        float du = sprite.getU1() - sprite.getU0(), dv = sprite.getV1() - sprite.getV0();
+        if (du == 0F || dv == 0F) return 0;
+        int px = Math.clamp((int) ((u - sprite.getU0()) / du * contents.width()), 0, contents.width() - 1);
+        int py = Math.clamp((int) ((v - sprite.getV0()) / dv * contents.height()), 0, contents.height() - 1);
+        try {
+            if (imageField == null) {
+                imageField = contents.getClass().getDeclaredField("originalImage");
+                imageField.setAccessible(true);
+            }
+            return ((com.mojang.blaze3d.platform.NativeImage) imageField.get(contents)).getPixel(px, py);
+        } catch (Exception e) {
+            imageMissing = true;
+            return 0;
+        }
+    }
+
     // the sprite's pixel at atlas coordinates (u, v) is shown
     public static boolean opaque(TextureAtlasSprite sprite, float u, float v) {
         var contents = sprite.contents();

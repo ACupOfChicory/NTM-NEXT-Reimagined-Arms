@@ -1,5 +1,6 @@
 package acup.gunfeel;
 
+import java.util.List;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
@@ -45,11 +46,25 @@ public final class BulletFx {
         RandomSource r = level.getRandom();
         Vec3 p0 = at.add(n.scale(0.02));
         Crumbs drawn = null;
+        boolean looked = false;
+        // a block drawn by its renderer (NTM's machines) has no texture for crumbs (the purple and black "missing"
+        // squares) or an odd one (its item's icon): crumbs of the colours its model has where the bullet hit
+        boolean byRenderer = noParticleTexture(state) || state.getRenderShape() != net.minecraft.world.level.block.RenderShape.MODEL;
         for (BulletRules.Particle part : fx.particles()) {
-            if (part.id().equalsIgnoreCase("block") && noParticleTexture(state)) {
-                // a block drawn by its renderer (NTM's machines) has no texture for crumbs (they show the purple and
-                // black "missing" squares): crumbs of the colour its model has where the bullet hit
-                if (drawn == null) drawn = Crumbs.at(level, at, n);
+            if (part.id().equalsIgnoreCase("block") && byRenderer) {
+                if (!looked) {
+                    looked = true;
+                    drawn = Crumbs.at(level, at, dir);
+                }
+                if (drawn == null && !noParticleTexture(state)) {
+                    // no drawn model there: the block's own crumbs after all
+                    ParticleOptions o = BulletServer.particle("block", state);
+                    for (int i = 0; o != null && i < part.count(); i++) {
+                        double sp = 0.05 + r.nextDouble() * 0.15;
+                        level.addParticle(o, p0.x, p0.y, p0.z, (out.x + r.nextGaussian() * 0.35) * sp, (out.y + r.nextGaussian() * 0.35) * sp + 0.03,
+                                (out.z + r.nextGaussian() * 0.35) * sp);
+                    }
+                }
                 if (drawn != null) {
                     for (int i = 0; i < part.count(); i++) {
                         double sp = 0.05 + r.nextDouble() * 0.15;
@@ -89,11 +104,28 @@ public final class BulletFx {
 
     // the drawn model under a hit point: its texture there, to take the crumbs' colours from
     private record Crumbs(RenderedMesh.Tri tri, float u, float v, double du, double dv) {
-        static @Nullable Crumbs at(ClientLevel level, Vec3 at, Vec3 n) {
+        // the bullet's line through the hit (the hit is on the block's cells or hitbox, up to a cell off the model):
+        // the first shown pixel it meets near there; else the triangle closest to the point
+        static @Nullable Crumbs at(ClientLevel level, Vec3 at, Vec3 dir) {
+            List<RenderedMesh.Tri> near = RenderedMesh.within(level, new net.minecraft.world.phys.AABB(at, at).inflate(0.35));
+            if (near.isEmpty()) return null;
+            Vec3 nd = dir.normalize();
+            org.joml.Vector3d o = new org.joml.Vector3d(at.x - nd.x * 0.3, at.y - nd.y * 0.3, at.z - nd.z * 0.3), dv = new org.joml.Vector3d(nd.x, nd.y, nd.z);
+            Crumbs first = null;
+            double firstT = 0.65;
+            for (RenderedMesh.Tri t : near) {
+                double k = t.cross(o, dv);
+                if (Double.isNaN(k) || k < 0 || k >= firstT) continue;
+                Crumbs c = of(t, new org.joml.Vector3d(dv).mul(k).add(o));
+                if (c == null) continue;
+                firstT = k;
+                first = c;
+            }
+            if (first != null) return first;
             org.joml.Vector3d pt = new org.joml.Vector3d(at.x, at.y, at.z);
             Crumbs best = null;
-            double bestD = 0.03;
-            for (RenderedMesh.Tri t : RenderedMesh.within(level, new net.minecraft.world.phys.AABB(at, at).inflate(0.05))) {
+            double bestD = 0.1;
+            for (RenderedMesh.Tri t : near) {
                 org.joml.Vector3d tn = t.normal();
                 if (tn == null) continue;
                 double d = Math.abs(tn.dot(new org.joml.Vector3d(pt).sub(t.corner(0))));
@@ -108,6 +140,16 @@ public final class BulletFx {
                 best = new Crumbs(t, u, v, g == null ? 0.01 : g[1], g == null ? 0.01 : g[3]);
             }
             return best;
+        }
+
+        private static @Nullable Crumbs of(RenderedMesh.Tri t, org.joml.Vector3d pt) {
+            double[] w = t.weights(pt, 1e-3);
+            if (w == null || !t.opaqueAt(w)) return null;
+            float u = (float) (w[0] * t.uv()[0] + w[1] * t.uv()[2] + w[2] * t.uv()[4]);
+            float v = (float) (w[0] * t.uv()[1] + w[1] * t.uv()[3] + w[2] * t.uv()[5]);
+            if (t.tex().color(u, v) == 0) return null;
+            double[] g = t.tex().grid();
+            return new Crumbs(t, u, v, g == null ? 0.01 : g[1], g == null ? 0.01 : g[3]);
         }
 
         // one crumb: a pixel near the hit (up to 2 pixels off), shaded as block crumbs are

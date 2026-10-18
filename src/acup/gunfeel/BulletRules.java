@@ -104,8 +104,9 @@ public final class BulletRules {
         List<Rule> out = new ArrayList<>();
         for (String raw : lines) {
             String line = raw.strip();
-            int hash = line.indexOf(" #");
-            if (hash >= 0) line = line.substring(0, hash).strip();
+            // a comment after a rule: " # text" (a lone #; "#minecraft:planks" is a tag)
+            java.util.regex.Matcher hash = java.util.regex.Pattern.compile("\\s#(\\s|$)").matcher(line);
+            if (hash.find()) line = line.substring(0, hash.start()).strip();
             if (line.isEmpty() || line.startsWith("#")) continue;
             String[] w = line.split("\\s+");
             String kind = w[0].toLowerCase(Locale.ROOT);

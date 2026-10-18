@@ -902,6 +902,10 @@ public final class RenderedMesh {
                 return MeshShapes.opaque(sprite, sprite.getU(u), sprite.getV(v));
             }
 
+            public int color(float u, float v) {
+                return MeshShapes.color(sprite, sprite.getU(u), sprite.getV(v));
+            }
+
             public boolean seeThrough() {
                 return atlasSprite(sprite).seeThrough();
             }
@@ -926,6 +930,10 @@ public final class RenderedMesh {
             return new Tex() {
                 public boolean opaque(float u, float v) {
                     return MeshShapes.opaque(sp, u, v);
+                }
+
+                public int color(float u, float v) {
+                    return MeshShapes.color(sp, u, v);
                 }
 
                 public boolean seeThrough() {
@@ -971,6 +979,14 @@ public final class RenderedMesh {
                 if (u >= sp.getU0() && u <= sp.getU1() && v >= sp.getV0() && v <= sp.getV1()) return MeshShapes.opaque(sp, u, v);
             }
             return true;
+        }
+
+        public int color(float u, float v) {
+            List<TextureAtlasSprite> l = grid[cell(v) * G + cell(u)];
+            if (l != null) for (TextureAtlasSprite sp : l) {
+                if (u >= sp.getU0() && u <= sp.getU1() && v >= sp.getV0() && v <= sp.getV1()) return MeshShapes.color(sp, u, v);
+            }
+            return 0;
         }
 
         public boolean seeThrough() {
