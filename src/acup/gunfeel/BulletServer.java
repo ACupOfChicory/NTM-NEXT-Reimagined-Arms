@@ -73,6 +73,8 @@ public final class BulletServer {
     // pierced (one it ended a tick inside of is not paid for again). The first block that stops it, else a miss at `to`.
     public static BlockHitResult clip(EntityBulletBaseMK4 bullet, Level level, Vec3 from, Vec3 to, java.util.Set<BlockPos> paid) {
         java.util.function.Consumer<BlockHitResult> through = hit -> passed(bullet, hit);
+        // an explosive bullet goes off on the first block it meets, never pierces
+        if (bullet.config != null && bullet.config.onImpact != null) return PassableClip.clip(level, from, to, through);
         Vec3 at = from;
         for (int i = 0; i < 16; i++) {
             BlockHitResult hit = PassableClip.clip(level, at, to, through);

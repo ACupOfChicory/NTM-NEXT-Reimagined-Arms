@@ -457,6 +457,7 @@ public final class Tracers {
             if (!Double.isNaN(hitEntity) && hitEntity < block.getLocation().distanceTo(ra)) break;
             Vec3 unit = dir.scale(1.0 / len);
             BlockPos pos = block.getBlockPos().immutable();
+            if (s.config.onImpact != null) break; // explosive: goes off on the first block
             boolean known = s.pierced.contains(pos);
             float left = known ? s.damage : PassableClip.pierced(level, block, s.damage);
             if (left < 0F) break;
