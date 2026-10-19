@@ -977,8 +977,13 @@ public final class Tracers {
         // the point the hole spreads from, a little out of the face: a piece on another block (the ground behind a
         // door, a wall behind bars) goes only where a straight line from it reaches, not round or under the thing hit
         Vector3d blast = new Vector3d(normal).mul(0.02).add(world);
-        for (Piece pc : pieces) {
-            boolean elsewhere = pc.tri().block() != null && !pc.tri().block().equals(pos);
+        for (Piece raw : pieces) {
+            boolean elsewhere = raw.tri().block() != null && !raw.tri().block().equals(pos);
+            Piece pc = elsewhere ? reachable(near, raw, blast) : raw;
+            if (pc == null) {
+                hiddenPieces++;
+                continue;
+            }
             double[] cen = centroid(pc.poly());
             boolean shown = false;
             for (int s = 0; s <= pc.poly().size() && !shown; s++) {
@@ -1330,10 +1335,14 @@ public final class Tracers {
 
     // a shown pixel of another triangle lies on the straight line from this point of the piece to the hit
     private static boolean cutOff(List<RenderedMesh.Tri> near, Piece self, double[] at, Vector3d blast) {
+        return blocker(near, self, at, blast) != null;
+    }
+
+    private static RenderedMesh.Tri blocker(List<RenderedMesh.Tri> near, Piece self, double[] at, Vector3d blast) {
         Vector3d from = new Vector3d(at[2], at[3], at[4]).fma(1e-3, self.tn());
         Vector3d d = new Vector3d(blast).sub(from);
         double len = d.length();
-        if (len < 1e-4) return false;
+        if (len < 1e-4) return null;
         d.div(len);
         AABB line = new AABB(from.x, from.y, from.z, blast.x, blast.y, blast.z);
         for (RenderedMesh.Tri o : near) {
@@ -1341,9 +1350,50 @@ public final class Tracers {
             double k = o.cross(from, d);
             if (Double.isNaN(k) || k <= 1e-4 || k >= len - 1e-4) continue;
             double[] w = o.weights(new Vector3d(d).mul(k).add(from), 1e-6);
-            if (w != null && o.opaqueAt(w)) return true;
+            if (w != null && o.opaqueAt(w)) return o;
         }
-        return false;
+        return null;
+    }
+
+    // a piece on another block cut down to what the hit reaches: while a point of it is shut off from the hit, the part
+    // on the far side of the plane of what shuts it off goes (the ground under a door: the strip in front stays)
+    private static Piece reachable(List<RenderedMesh.Tri> near, Piece pc, Vector3d blast) {
+        List<double[]> poly = pc.poly();
+        for (int it = 0; it < 6 && poly.size() >= 3; it++) {
+            double[] cen = centroid(poly);
+            RenderedMesh.Tri o = null;
+            for (int s = 0; s <= poly.size() && o == null; s++) o = blocker(near, pc, s == 0 ? cen : lerp(poly.get(s - 1), cen, 0.2), blast);
+            if (o == null) break;
+            Vector3d a = o.corner(0), n = o.corner(1).sub(a).cross(o.corner(2).sub(a));
+            if (n.lengthSquared() < 1e-18) break;
+            n.normalize();
+            double c = n.dot(a), side = n.dot(blast) - c;
+            if (Math.abs(side) < 1e-5) return null;
+            if (side < 0) {
+                n.negate();
+                c = -c;
+            }
+            poly = cutPlane(poly, n, c + 1e-4);
+        }
+        if (poly.size() < 3) return null;
+        return poly == pc.poly() ? pc : new Piece(pc.tri(), poly, pc.tn(), pc.plane(), box2(poly), pc.back(), pc.pivot(), pc.frame());
+    }
+
+    // the part of the polygon with n . (x, y, z) >= c
+    private static List<double[]> cutPlane(List<double[]> poly, Vector3d n, double c) {
+        List<double[]> out = new ArrayList<>(poly.size() + 2);
+        for (int i = 0; i < poly.size(); i++) {
+            double[] a = poly.get(i), b = poly.get((i + 1) % poly.size());
+            double da = n.x * a[2] + n.y * a[3] + n.z * a[4] - c, db = n.x * b[2] + n.y * b[3] + n.z * b[4] - c;
+            if (da >= 0) out.add(a);
+            if ((da >= 0) != (db >= 0)) {
+                double t = da / (da - db);
+                double[] m = new double[a.length];
+                for (int j = 0; j < a.length; j++) m[j] = a[j] + (b[j] - a[j]) * t;
+                out.add(m);
+            }
+        }
+        return out;
     }
 
     // a shown pixel of another triangle is in front of this point of the piece, towards the shooter
