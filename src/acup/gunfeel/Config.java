@@ -83,6 +83,8 @@ public final class Config {
     public static String armPathTimes = "";
     public static boolean instantSwitch = true;
     public static boolean bulletFx = true;
+    // loudness of bullet hit sounds, times the rule's volume; above 1 the sound is doubled up (Minecraft stops at 1)
+    public static float hitVolume = 1F;
     public static boolean holeCache = true;
     // arm thickness before armScale, the same on every gun (Maresleg / Old Classic); 0 = grows with the arm's length
     public static float armBaseRight = 1.70F;
@@ -205,6 +207,8 @@ public final class Config {
               until the next tick, and the new gun starts its draw animation without waiting for the server
             bulletFx: particles and sounds of bullets (block hits, a bullet whizzing past, the in-flight sound) by the
               rules in config/ntm-gunfeel-bullets.txt
+            hitVolume: loudness of bullet hit sounds, times each hit rule's volume (1 = as the rules say, 0 = silent, up to 4;
+              above 1 the same sound is played several times at once, Minecraft goes no louder than 1). /gunfeel hitvolume
             holeCache: bullet holes kept on the graphics card in batches, rebuilt only when a hole comes or goes, not
               every frame (false = the old way, every hole sent again each frame)
             Every value except enabled can be overridden per gun in config/ntm-gunfeel-guns.properties
@@ -348,6 +352,7 @@ public final class Config {
         armPathTimes = p.getProperty("armPathTimes", armPathTimes).trim();
         instantSwitch = bool(p, "instantSwitch", instantSwitch);
         bulletFx = bool(p, "bulletFx", bulletFx);
+        hitVolume = Math.max(0F, Math.min(4F, num(p, "hitVolume", hitVolume)));
         holeCache = bool(p, "holeCache", holeCache);
         armBaseRight = num(p, "armBaseRight", armBaseRight);
         armBaseLeft = num(p, "armBaseLeft", armBaseLeft);
@@ -452,6 +457,7 @@ public final class Config {
         p.setProperty("armPathTimes", armPathTimes);
         p.setProperty("instantSwitch", Boolean.toString(instantSwitch));
         p.setProperty("bulletFx", Boolean.toString(bulletFx));
+        p.setProperty("hitVolume", Float.toString(hitVolume));
         p.setProperty("holeCache", Boolean.toString(holeCache));
         p.setProperty("armBaseRight", Float.toString(armBaseRight));
         p.setProperty("armBaseLeft", Float.toString(armBaseLeft));
@@ -479,6 +485,20 @@ public final class Config {
         p.setProperty("armScaleRight", Float.toString(armScaleRight));
         p.setProperty("armScaleLeft", Float.toString(armScaleLeft));
         return p;
+    }
+
+    // one key of config/ntm-gunfeel.properties changed in the file (for commands); the file is read back on the next poll
+    public static void setInFile(String key, String value) throws IOException {
+        if (file == null) file = FMLPaths.CONFIGDIR.get().resolve("ntm-gunfeel.properties");
+        if (!Files.exists(file)) save();
+        Properties p = new Properties();
+        try (Reader r = Files.newBufferedReader(file)) {
+            p.load(r);
+        }
+        p.setProperty(key, value);
+        try (Writer w = Files.newBufferedWriter(file)) {
+            p.store(w, HEADER);
+        }
     }
 
     private static void save() throws IOException {

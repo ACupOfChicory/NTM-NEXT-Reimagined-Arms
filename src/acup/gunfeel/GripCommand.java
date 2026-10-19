@@ -57,6 +57,22 @@ public final class GripCommand {
                     c.getSource().sendSuccess(() -> Component.literal(on ? "Отладка рук включена: каждый кадр пишется в лог ([armdebug])" : "Отладка рук выключена"), false);
                     return 1;
                 }))
+                .then(Commands.literal("hitvolume").executes(c -> {
+                    c.getSource().sendSuccess(() -> Component.literal("Громкость попаданий: " + Config.hitVolume
+                            + " (1 = как в правилах, 0 = тихо, до 4). /gunfeel hitvolume <число>"), false);
+                    return 1;
+                }).then(Commands.argument("volume", FloatArgumentType.floatArg(0F, 4F)).executes(c -> {
+                    float v = FloatArgumentType.getFloat(c, "volume");
+                    Config.hitVolume = v;
+                    try {
+                        Config.setInFile("hitVolume", Float.toString(v));
+                    } catch (java.io.IOException e) {
+                        c.getSource().sendFailure(Component.literal("Не записалось в конфиг: " + e.getMessage()));
+                        return 0;
+                    }
+                    c.getSource().sendSuccess(() -> Component.literal("Громкость попаданий: " + v + (v > 1F ? " (звук накладывается " + (int) Math.ceil(v - 1e-3F) + " раза)" : "")), false);
+                    return 1;
+                })))
                 .then(Commands.literal("sounddebug").executes(c -> {
                     BulletFx.debugSound = !BulletFx.debugSound;
                     boolean on = BulletFx.debugSound;

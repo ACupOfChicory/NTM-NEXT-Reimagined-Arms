@@ -155,7 +155,12 @@ public final class BulletFx {
             return;
         }
         if (debugSound) sd("  rule sound {} -> {} (families {})", s.id(), e.location(), id.equals(s.id()) ? "none" : "yes");
-        play(level, at, e, s.volume(), s.pitch() * (0.9F + r.nextFloat() * 0.2F), fx.range());
+        float volume = s.volume() * Config.hitVolume;
+        if (volume <= 0F) {
+            sd("  not played: hitVolume 0");
+            return;
+        }
+        play(level, at, e, volume, s.pitch() * (0.9F + r.nextFloat() * 0.2F), fx.range());
     }
 
     // a sound heard over `range` blocks, fading out to it. Minecraft fades a block's sound out within 16 blocks
@@ -172,15 +177,22 @@ public final class BulletFx {
             }
             p = ear.add(at.subtract(ear).scale(16.0 / range));
         }
-        var inst = new net.minecraft.client.resources.sounds.SimpleSoundInstance(e, SoundSource.PLAYERS, volume, pitch,
-                RandomSource.create(level.getRandom().nextLong()), p.x, p.y, p.z);
+        // Minecraft plays no louder than volume 1: louder, the same track at the same pitch several times at once
+        int copies = Math.min(4, Math.max(1, (int) Math.ceil(volume - 1e-3F)));
+        long seed = level.getRandom().nextLong();
         var sm = Minecraft.getInstance().getSoundManager();
-        var result = sm.play(inst);
+        net.minecraft.client.resources.sounds.SimpleSoundInstance inst = null;
+        net.minecraft.client.sounds.SoundEngine.PlayResult result = null;
+        for (int i = 0; i < copies; i++) {
+            inst = new net.minecraft.client.resources.sounds.SimpleSoundInstance(e, SoundSource.PLAYERS, volume / copies, pitch,
+                    RandomSource.create(seed), p.x, p.y, p.z);
+            result = sm.play(inst);
+        }
         if (debugSound) {
             Vec3 ear = Minecraft.getInstance().gameRenderer.mainCamera().position();
             var w = sm.getSoundEvent(e.location());
-            sd("  played {}: track {}, known {}, volume {}, pitch {}, {} blocks away (set at {}), result {}, active {}",
-                    e.location(), inst.getSound() == null ? "?" : inst.getSound().getLocation(), w != null,
+            sd("  played {} x{}: track {}, known {}, volume {}, pitch {}, {} blocks away (set at {}), result {}, active {}",
+                    e.location(), copies, inst.getSound() == null ? "?" : inst.getSound().getLocation(), w != null,
                     String.format("%.2f", volume), String.format("%.2f", pitch), String.format("%.1f", at.distanceTo(ear)),
                     String.format("%.1f", p.distanceTo(ear)), result, sm.isActive(inst));
         }
