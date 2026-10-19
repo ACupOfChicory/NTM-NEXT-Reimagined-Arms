@@ -24,6 +24,9 @@ public final class GunFeelMod {
             PayloadRegistrar r = e.registrar("1").optional();
             if (dist.isClient()) r.playToClient(ShotPayload.TYPE, ShotPayload.CODEC, Tracers::handle);
             else r.playToClient(ShotPayload.TYPE, ShotPayload.CODEC);
+            r.playToServer(AmmoSelectPayload.TYPE, AmmoSelectPayload.CODEC, (p, ctx) -> {
+                if (ctx.player() instanceof net.minecraft.server.level.ServerPlayer sp) AmmoLock.select(sp, p.config());
+            });
             r.playToServer(AmmoLockPayload.TYPE, AmmoLockPayload.CODEC, (p, ctx) -> {
                 if (ctx.player() instanceof net.minecraft.server.level.ServerPlayer sp) AmmoLock.toggle(sp);
             });

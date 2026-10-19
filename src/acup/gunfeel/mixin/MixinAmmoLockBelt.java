@@ -21,6 +21,10 @@ public abstract class MixinAmmoLockBelt {
     @Inject(method = "getFirstConfig", at = @At("HEAD"))
     private void gunfeel$first(ItemStack stack, Container inventory, CallbackInfoReturnable<BulletConfig> cir) {
         AmmoLock.STACK.set(stack);
+        // the chosen type (radial menu) while there is any
+        if (inventory == null || AmmoLock.locked(stack)) return;
+        BulletConfig next = AmmoLock.chosen(stack);
+        if (next != null && ((MagazineBelt) (Object) this).acceptedBullets.contains(next) && AmmoLock.count(next, inventory) != 0) cir.setReturnValue(next);
     }
 
     @Redirect(method = "getFirstConfig", at = @At(value = "FIELD", opcode = 180 /* GETFIELD */,

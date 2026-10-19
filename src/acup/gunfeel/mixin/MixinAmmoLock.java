@@ -16,17 +16,24 @@ import acup.gunfeel.AmmoLock;
 import net.minecraft.world.Container;
 import net.minecraft.world.item.ItemStack;
 
-// Ammo lock: an empty magazine looks for any ammo it takes (NTM); on a locked gun only for the type it had
+// Ammo lock and choice (AmmoLock): an empty magazine looks for any ammo it takes (NTM); on a locked gun only for the
+// type it had, else the chosen type first
 @Mixin(value = MagazineSingleTypeBase.class, remap = false)
 public abstract class MixinAmmoLock {
-    @Inject(method = "standardReload", at = @At("HEAD"))
+    // our reload: inventory, then ammo bags, then infinite bags; the lock and the chosen type (AmmoLock.reload)
+    @Inject(method = "standardReload", at = @At("HEAD"), cancellable = true)
     private void gunfeel$reload(ItemStack stack, Container inventory, int loadLimit, CallbackInfo ci) {
         AmmoLock.STACK.set(stack);
+        if (AmmoLock.reload((MagazineSingleTypeBase) (Object) this, stack, inventory, loadLimit)) ci.cancel();
     }
 
-    @Inject(method = "getFirstConfig", at = @At("HEAD"))
+    // what an empty magazine would load, the same way
+    @Inject(method = "getFirstConfig", at = @At("HEAD"), cancellable = true)
     private void gunfeel$first(ItemStack stack, Container inventory, CallbackInfoReturnable<BulletConfig> cir) {
         AmmoLock.STACK.set(stack);
+        MagazineSingleTypeBase self = (MagazineSingleTypeBase) (Object) this;
+        if (inventory != null && self.getAmount(stack, null) == 0)
+            cir.setReturnValue(AmmoLock.pick(self.acceptedBullets, self.getType(stack, null), stack, inventory));
     }
 
     @Redirect(method = {"standardReload", "getFirstConfig"}, at = @At(value = "FIELD", opcode = 180 /* GETFIELD */,

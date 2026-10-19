@@ -136,33 +136,16 @@ public final class Hud {
         g.fill(x + 2, y + 4, x + 3, y + 6, 0xFF505050); // keyhole
     }
 
-    private static final int INFINITE = -1;
+    private static final int INFINITE = AmmoLock.INFINITE;
 
     // the ammo the reserve counts: the magazine's type, or for an empty one not locked what a reload finds first
     private static BulletConfig reserveType(MagazineSingleTypeBase mag, ItemStack gun, Inventory inv) {
-        BulletConfig type = mag.getAmount(gun, inv) == 0 && !AmmoLock.locked(gun) ? mag.getFirstConfig(gun, inv) : null;
+        BulletConfig type = mag.getAmount(gun, inv) == 0 ? mag.getFirstConfig(gun, inv) : null;
         return type != null ? type : mag.getType(gun, inv);
     }
 
-    // rounds of that ammo in the inventory and its ammo bags; INFINITE when an infinite bag holds it
     private static int reserve(BulletConfig type, Inventory inv) {
-        if (type == null) return 0;
-        int n = 0;
-        for (int i = 0; i < inv.getContainerSize(); i++) {
-            ItemStack s = inv.getItem(i);
-            if (s.isEmpty()) continue;
-            if (type.matchesAmmo(s)) n += s.getCount();
-            var bag = IMagazine.ammoBag(s);
-            if (bag == null) continue;
-            boolean infinite = IMagazine.isInfiniteBag(s);
-            for (int j = 0; j < bag.getContainerSize(); j++) {
-                ItemStack in = bag.getItem(j);
-                if (in.isEmpty() || !type.matchesAmmo(in)) continue;
-                if (infinite) return INFINITE;
-                n += in.getCount();
-            }
-        }
-        return n;
+        return AmmoLock.count(type, inv);
     }
 
     private static int durabilityColor(float health) {
