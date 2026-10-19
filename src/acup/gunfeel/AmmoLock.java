@@ -77,7 +77,8 @@ public final class AmmoLock {
         return n;
     }
 
-    // the type an empty magazine loads: a locked gun its own, else the chosen one while there is any, else the first
+    // the type an empty magazine loads: a locked gun its own (none while there is none: it waits), else the type chosen
+    // in the menu while there is any, else the first found as NTM does
     // found: in the inventory, then in ammo bags, then in infinite bags; null = none there
     public static BulletConfig pick(List<BulletConfig> accepted, BulletConfig current, ItemStack gun, Container inv) {
         if (locked(gun)) return current != null && count(current, inv) != 0 ? current : null;
@@ -119,6 +120,8 @@ public final class AmmoLock {
             type = mag.getType(gun, null);
             if (type == null) type = mag.acceptedBullets.get(0);
         } else {
+            // the menu's choice holds while there is any of it; once it has run out the gun takes ammo as NTM does
+            if (!locked(gun) && chosen(gun) != null && count(chosen(gun), inv) == 0) ItemGunBaseNT.setValueInt(gun, NEXT, 0);
             type = pick(mag.acceptedBullets, mag.getType(gun, null), gun, inv);
             if (type == null) return true;
         }
@@ -155,8 +158,6 @@ public final class AmmoLock {
         }
         if (took == 0) return true;
         mag.setAmount(gun, Math.min(loaded + took * per, mag.capacity));
-        // the menu's choice is for one reload: after it the gun takes ammo as NTM does (first found)
-        if (chosen(gun) == type) ItemGunBaseNT.setValueInt(gun, NEXT, 0);
         String key = FROM_BAG + mag.index;
         ItemGunBaseNT.setValueInt(gun, key, fromBag || (loaded > 0 && ItemGunBaseNT.getValueInt(gun, key) != 0) ? 1 : 0);
         return true;

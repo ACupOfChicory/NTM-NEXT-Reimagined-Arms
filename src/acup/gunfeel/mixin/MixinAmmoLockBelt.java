@@ -18,13 +18,15 @@ import net.minecraft.world.item.ItemStack;
 // Ammo lock: a belt feeds the first ammo it takes found in the inventory (NTM); on a locked gun only the type it fed
 @Mixin(value = MagazineBelt.class, remap = false)
 public abstract class MixinAmmoLockBelt {
-    @Inject(method = "getFirstConfig", at = @At("HEAD"))
+    @Inject(method = "getFirstConfig", at = @At("HEAD"), cancellable = true)
     private void gunfeel$first(ItemStack stack, Container inventory, CallbackInfoReturnable<BulletConfig> cir) {
         AmmoLock.STACK.set(stack);
-        // the chosen type (radial menu) while there is any
+        // the chosen type (radial menu) while there is any; run out, the choice is gone and NTM's order counts
         if (inventory == null || AmmoLock.locked(stack)) return;
         BulletConfig next = AmmoLock.chosen(stack);
-        if (next != null && ((MagazineBelt) (Object) this).acceptedBullets.contains(next) && AmmoLock.count(next, inventory) != 0) cir.setReturnValue(next);
+        if (next == null || !((MagazineBelt) (Object) this).acceptedBullets.contains(next)) return;
+        if (AmmoLock.count(next, inventory) != 0) cir.setReturnValue(next);
+        else com.hbm.items.weapon.sedna.ItemGunBaseNT.setValueInt(stack, AmmoLock.NEXT, 0);
     }
 
     @Redirect(method = "getFirstConfig", at = @At(value = "FIELD", opcode = 180 /* GETFIELD */,
