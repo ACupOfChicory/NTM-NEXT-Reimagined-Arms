@@ -387,8 +387,9 @@ public final class Tracers {
         }
         // fired from a gun (not spawned somewhere else): the path is tested from the shooter's eyes, as on the
         // server, so a wall right in front of the muzzle still gets its hole
-        Entity shooter = mc.level == null || p.owner() < 0 ? null : mc.level.getEntity(p.owner());
-        if (shooter != null && shooter.getEyePosition().distanceToSqr(s.start) < 9.0) s.eye = shooter.getEyePosition();
+        // the server's own start point (its eyes; this client's eyes of the shooter may be off by centimetres, enough to
+        // clip a corner the server's bullet misses)
+        if (!Double.isNaN(p.ex())) s.eye = new Vec3(p.ex(), p.ey(), p.ez());
         SHOTS.add(s);
         if (SHOTS.size() > 512) SHOTS.remove(0).gone = true;
         BulletFx.fly(() -> s.at(Math.min((System.nanoTime() - s.born) / 50_000_000.0, Double.isNaN(s.end) ? s.lifeTicks : s.end)),

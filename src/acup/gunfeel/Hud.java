@@ -83,7 +83,11 @@ public final class Hud {
         // a fixed column (as wide as "0000"), so a short ∞ or a belt without reserve does not move the icon and padlock
         int smallW = Math.max(16, font.width("0000"));
         int smallX = right - smallW;
-        if (small != null) g.text(font, small, smallX, top + 2, GREY, true);
+        if (small != null) {
+            // digits fill the column; a lone ∞ sits in its middle
+            int sx = small.equals("\u221E") ? smallX + (smallW - font.width(small)) / 2 : smallX;
+            g.text(font, small, sx, top + 2, GREY, true);
+        }
         if (icon != null && !icon.isEmpty()) g.item(icon, smallX, top + 12);
         if (AmmoLock.locked(stack)) lock(g, smallX + 18, top + 17);
 

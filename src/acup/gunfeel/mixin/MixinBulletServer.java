@@ -15,6 +15,7 @@ import acup.gunfeel.ReaimTimes;
 import acup.gunfeel.ShotPayload;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.network.PacketDistributor;
 
@@ -113,8 +114,13 @@ public abstract class MixinBulletServer {
         double mult = motionMult();
         Vec3 v = self.getDeltaMovement().scale(mult);
         Entity owner = self.getOwner();
+        // the start of the path the server tests on the first tick (MixinThrowableHit): the thrower's eyes when near
+        LivingEntity thrower = self.getThrower();
+        Vec3 eye = thrower == null ? null : thrower.getEyePosition();
+        if (eye != null && eye.distanceToSqr(self.position()) >= 9.0) eye = null;
         ShotPayload p = new ShotPayload(config.id, owner == null ? -1 : owner.getId(), self.getX(), self.getY(), self.getZ(),
-                (float) v.x, (float) v.y, (float) v.z, (float) (config.gravity * mult), config.expires, self.damage);
+                (float) v.x, (float) v.y, (float) v.z, (float) (config.gravity * mult), config.expires, self.damage,
+                eye == null ? Double.NaN : eye.x, eye == null ? Double.NaN : eye.y, eye == null ? Double.NaN : eye.z);
         PacketDistributor.sendToPlayersNear(server, null, self.getX(), self.getY(), self.getZ(), 256.0, p);
     }
 }
