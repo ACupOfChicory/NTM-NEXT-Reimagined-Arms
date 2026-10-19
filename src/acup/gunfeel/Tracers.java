@@ -1898,6 +1898,7 @@ public final class Tracers {
         // a change that leaves the block where it was (a door powered, a block waterlogged)
         // (four times a second, not every frame: a look at every hole's block)
         var lvl = Minecraft.getInstance().level;
+        long pc = Perf.start();
         boolean checkBlocks = lvl != null && now - blocksChecked > 250_000_000L;
         if (checkBlocks) blocksChecked = now;
         if (checkBlocks) HOLES.removeIf(h -> {
@@ -1914,7 +1915,10 @@ public final class Tracers {
             drawnChecked = now;
             HOLES.removeIf(h -> h.drawn() && h.follow() == null && !stillDrawn(lvl, h));
         }
+        Perf.add(Perf.CHECKS, pc);
+        long pf = Perf.start();
         if (lvl != null) follow(lvl, now);
+        Perf.add(Perf.FOLLOW, pf);
         batch(now, life);
         if (HOLES.isEmpty() || !Config.bulletHoles) return;
         // the rest (fading, on moving parts, on glass, holeCache off) sent this frame, sorted in one pass

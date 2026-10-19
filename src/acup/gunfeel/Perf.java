@@ -6,8 +6,10 @@ public final class Perf {
     private Perf() {
     }
 
-    public static final int FLY = 0, HOLE_MAKE = 1, FX = 2, HOLE_DRAW = 3, TRACERS = 4, HOLE_BAKE = 5;
-    private static final String[] NAMES = {"flight", "making holes", "hit effects", "drawing holes", "tracers", "baking holes"};
+    // (flight holds making holes and hit effects; drawing holes holds following parts and block checks)
+    public static final int FLY = 0, HOLE_MAKE = 1, FX = 2, HOLE_DRAW = 3, TRACERS = 4, HOLE_BAKE = 5, FOLLOW = 6, CHECKS = 7;
+    private static final String[] NAMES = {"flight", "making holes", "hit effects", "drawing holes", "tracers", "baking holes", "following parts",
+            "block checks"};
     private static final long[] NANOS = new long[NAMES.length];
     private static final int[] CALLS = new int[NAMES.length];
     private static long since, frames;
@@ -20,7 +22,7 @@ public final class Perf {
     public static void add(int part, long started) {
         NANOS[part] += System.nanoTime() - started;
         CALLS[part]++;
-        if (part != HOLE_DRAW && part != TRACERS) busy = true;
+        if (part != HOLE_DRAW && part != TRACERS && part != FOLLOW && part != CHECKS) busy = true;
     }
 
     // once a frame: shots flying, holes kept
@@ -34,7 +36,7 @@ public final class Perf {
             double total = 0;
             for (int i = 0; i < NAMES.length; i++) {
                 double ms = NANOS[i] / 1e6 / Math.max(1, frames);
-                total += ms;
+                if (i != FOLLOW && i != CHECKS) total += ms; // the total as before, for comparing
                 b.append(String.format(java.util.Locale.ROOT, "%s %.3f ms (%d calls), ", NAMES[i], ms, CALLS[i]));
             }
             GunFeel.LOGGER.info("Bullet frame cost over {} frames ({} fps): {}total {} ms a frame; {} shots flying, {} holes",
