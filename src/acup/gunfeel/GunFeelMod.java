@@ -13,6 +13,7 @@ public final class GunFeelMod {
         if (dist.isClient()) {
             GunFeel.init();
             HoleRender.register(modBus);
+            AmmoLockKey.register(modBus);
         }
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(net.neoforged.neoforge.event.RegisterCommandsEvent.class,
                 e -> ReaimCommand.register(e.getDispatcher()));
@@ -23,6 +24,9 @@ public final class GunFeelMod {
             PayloadRegistrar r = e.registrar("1").optional();
             if (dist.isClient()) r.playToClient(ShotPayload.TYPE, ShotPayload.CODEC, Tracers::handle);
             else r.playToClient(ShotPayload.TYPE, ShotPayload.CODEC);
+            r.playToServer(AmmoLockPayload.TYPE, AmmoLockPayload.CODEC, (p, ctx) -> {
+                if (ctx.player() instanceof net.minecraft.server.level.ServerPlayer sp) AmmoLock.toggle(sp);
+            });
         });
     }
 }

@@ -1,0 +1,6 @@
+{
+  "key.category.ntmgunfeel.main": "NTM-NEXT Reimagined Arms",
+  "key.ntmgunfeel.ammo_lock": "Lock ammo type",
+  "message.ntmgunfeel.ammo_locked": "Ammo locked: %s",
+  "message.ntmgunfeel.ammo_unlocked": "Ammo unlocked"
+}

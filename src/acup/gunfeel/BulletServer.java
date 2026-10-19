@@ -84,7 +84,7 @@ public final class BulletServer {
             }
         }
         BulletRules.Sound s = BulletRules.hit(rule).sound();
-        boolean steel = s != null && s.id().startsWith("ntmgunfeel:bullet.hit.steel");
+        boolean steel = s != null && (s.id().startsWith("ntmgunfeel:bullet.hit.steel") || s.id().startsWith("ntmgunfeel:bullet.hit.metal"));
         if (debugRicochet) acup.gunfeel.GunFeel.LOGGER.info("[sounddebug] server: ricochet off {} at {} (hit sound {}): {}",
                 BuiltInRegistries.BLOCK.getKey(rule.getBlock()), hit.getBlockPos().toShortString(), s == null ? "none" : s.id(),
                 steel ? "our steel ricochet" : "NTM's ricochet sound");

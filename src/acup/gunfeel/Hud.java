@@ -78,6 +78,7 @@ public final class Hud {
         if (small != null) g.text(font, small, smallX, top + 2, GREY, true);
         ItemStack icon = mag.getIconForHUD(stack, player);
         if (icon != null && !icon.isEmpty()) g.item(icon, smallX, top + 12);
+        if (AmmoLock.locked(stack)) lock(g, smallX + 18, top + 17);
 
         // big magazine count at 2x, leading zeros dimmed
         int bigW = font.width(big) * 2;
@@ -115,6 +116,18 @@ public final class Hud {
                 g.item(stack, sepX - 6 - 16, top + 7);
             }
         }
+    }
+
+    // the ammo lock: a small grey padlock (5 x 7), with a shadow
+    private static void lock(GuiGraphicsExtractor g, int x, int y) {
+        for (int pass = 0; pass < 2; pass++) {
+            int o = pass == 0 ? 1 : 0, c = pass == 0 ? 0x80000000 : 0xFFA0A0A0;
+            g.fill(x + 1 + o, y + o, x + 4 + o, y + 1 + o, c); // shackle top
+            g.fill(x + 1 + o, y + 1 + o, x + 2 + o, y + 3 + o, c);
+            g.fill(x + 3 + o, y + 1 + o, x + 4 + o, y + 3 + o, c);
+            g.fill(x + o, y + 3 + o, x + 5 + o, y + 7 + o, c); // body
+        }
+        g.fill(x + 2, y + 4, x + 3, y + 6, 0xFF505050); // keyhole
     }
 
     private static int reserve(MagazineSingleTypeBase mag, ItemStack gun, Inventory inv) {
