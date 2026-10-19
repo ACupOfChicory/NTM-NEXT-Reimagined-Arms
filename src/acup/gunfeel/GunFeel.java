@@ -47,7 +47,6 @@ public final class GunFeel {
         NeoForge.EVENT_BUS.addListener(RegisterClientCommandsEvent.class, e -> GripCommand.register(e.getDispatcher()));
         NeoForge.EVENT_BUS.addListener(net.neoforged.neoforge.client.event.SubmitCustomGeometryEvent.class, Tracers::submit);
         NeoForge.EVENT_BUS.addListener(net.neoforged.neoforge.client.event.RenderLevelStageEvent.AfterWeather.class, Tracers::afterWeather);
-        NeoForge.EVENT_BUS.addListener(net.neoforged.neoforge.client.event.RenderLevelStageEvent.AfterTranslucentBlocks.class, Tracers::afterTranslucentBlocks);
         NeoForge.EVENT_BUS.addListener(net.neoforged.neoforge.client.event.RenderLevelStageEvent.AfterOpaqueFeatures.class, Tracers::afterOpaqueFeatures);
         NeoForge.EVENT_BUS.addListener(net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingOut.class, e -> Tracers.clear());
         NeoForge.EVENT_BUS.addListener(net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingIn.class, e -> MeshShapes.generate());

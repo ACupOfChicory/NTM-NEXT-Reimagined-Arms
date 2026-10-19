@@ -1685,21 +1685,6 @@ public final class Tracers {
     // holes on glass, drawn at once after the clouds and rain (RenderLevelStageEvent.AfterWeather): drawn before
     // them, the clouds and rain behind the glass would cover the hole
     public static void afterWeather(net.neoforged.neoforge.client.event.RenderLevelStageEvent.AfterWeather event) {
-        drawLate(event, false);
-    }
-
-    // holes on the glass of what a renderer draws (a sliding door's window, drawn among the translucent features):
-    // after the translucent blocks, before the translucent particles. After them (with the glass blocks' holes) the
-    // smoke in front, which writes depth, hid the holes while the door showed through it
-    public static void afterTranslucentBlocks(net.neoforged.neoforge.client.event.RenderLevelStageEvent.AfterTranslucentBlocks event) {
-        drawLate(event, true);
-    }
-
-    private static boolean onRenderer(Hole h) {
-        return h.drawn();
-    }
-
-    private static void drawLate(net.neoforged.neoforge.client.event.RenderLevelStageEvent event, boolean renderer) {
         if (HOLES.isEmpty() || !Config.bulletHoles || shaderTransparency()) return;
         Vec3 cam = event.getLevelRenderState().cameraRenderState.pos;
         long now = System.nanoTime();
@@ -1708,7 +1693,7 @@ public final class Tracers {
         @SuppressWarnings("unchecked")
         List<Hole>[] groups = new List[2 * (SCORCH + 1)];
         for (Hole h : HOLES) {
-            if (!h.late() || onRenderer(h) != renderer) continue;
+            if (!h.late()) continue;
             int g = h.kind() + (h.cull() ? SCORCH + 1 : 0);
             if (groups[g] == null) groups[g] = new ArrayList<>();
             groups[g].add(h);
