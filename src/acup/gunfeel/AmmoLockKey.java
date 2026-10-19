@@ -15,7 +15,8 @@ import net.neoforged.neoforge.client.event.RenderGuiEvent;
 import net.neoforged.neoforge.common.NeoForge;
 
 // Client: the ammo key (Controls, "NTM-NEXT Reimagined Arms"; Y by default). A tap locks or unlocks the held gun's
-// ammo type; held, it opens the radial ammo menu (on a locked gun too: the lock moves to the chosen ammo), let go it takes the hovered ammo.
+// ammo type; held, it opens the radial ammo menu (on a locked gun too: the lock moves to the chosen ammo); a left click takes the
+// hovered ammo, letting go of the key just closes it.
 public final class AmmoLockKey {
     public static final KeyMapping.Category CATEGORY = new KeyMapping.Category(Identifier.fromNamespaceAndPath("ntmgunfeel", "main"));
     public static final KeyMapping KEY = new KeyMapping("key.ntmgunfeel.ammo_lock", 89 /* GLFW_KEY_Y */, CATEGORY);
@@ -32,8 +33,26 @@ public final class AmmoLockKey {
             e.registerCategory(CATEGORY);
             e.register(KEY);
         });
+        NeoForge.EVENT_BUS.addListener(ClientTickEvent.Pre.class, e -> click());
         NeoForge.EVENT_BUS.addListener(ClientTickEvent.Post.class, e -> tick());
         NeoForge.EVENT_BUS.addListener(RenderGuiEvent.Post.class, e -> RadialMenu.render(e.getGuiGraphics()));
+    }
+
+    // before the game handles its keys: a left click in the open menu takes the hovered ammo and goes no further (no
+    // swing, no digging while the button stays down)
+    private static void click() {
+        if (!RadialMenu.isOpen()) return;
+        var attack = Minecraft.getInstance().options.keyAttack;
+        boolean clicked = false;
+        while (attack.consumeClick()) clicked = true;
+        if (!clicked) return;
+        ((acup.gunfeel.mixin.KeyMappingAccess) attack).gunfeel$setIsDown(false);
+        // NTM's fire key sits on the same button: up too, so the click does not shoot once the menu is gone
+        ((acup.gunfeel.mixin.KeyMappingAccess) (Object) com.hbm.client.Keybinds.GUN_PRIMARY).gunfeel$setIsDown(false);
+        BulletConfig c = RadialMenu.hovered();
+        if (c == null) return;
+        RadialMenu.close();
+        send(new AmmoSelectPayload(c.id));
     }
 
     private static void tick() {
@@ -58,9 +77,7 @@ public final class AmmoLockKey {
         }
         if (!down && wasDown) {
             if (RadialMenu.isOpen()) {
-                BulletConfig c = RadialMenu.hovered();
-                RadialMenu.close();
-                if (c != null) send(new AmmoSelectPayload(c.id));
+                RadialMenu.close(); // let go without a click: nothing changes
             } else if (!held && gun) {
                 send(AmmoLockPayload.INSTANCE);
             }
