@@ -5,3 +5,35 @@ whizz3-6 "Bullet Fly By" by GO_s0unds123      https://freesound.org/people/GO_s0
 whizz7  zip of "bullet zip and hit" by TheLittleCrow  https://freesound.org/people/TheLittleCrow/sounds/496509/
 crack1  "Bullet Crack.wav" by morganpurkis     https://freesound.org/people/morganpurkis/sounds/386854/
 crack2  "Real Bullet Flyby Sound" by qubodup   https://freesound.org/people/qubodup/sounds/855248/
+
+Bullet hit sounds (bullet/hit/), from freesound.org: single hits cut out of these recordings, mixed to mono and
+normalized. CC0 1.0 = public domain; CC BY = Creative Commons Attribution (https://creativecommons.org/licenses/by/4.0/,
+https://creativecommons.org/licenses/by/3.0/), credited here.
+wood1                        "bulletimpact_wood1.wav" by NoiseCollector (CC BY 3.0)  https://freesound.org/s/237448/
+wood2, wood3                 "Ricochet wood3.wav" by CGEffex (CC BY 4.0)  https://freesound.org/s/96636/
+wood4                        "wood_hit.wav" by 110110010 (CC0)  https://freesound.org/s/66396/
+wood5                        "Wooden Hit" by jackyyang09 (CC0)  https://freesound.org/s/506718/
+wood6                        "Kick wood" by jorickhoofd (CC BY 4.0)  https://freesound.org/s/178744/
+wood7                        "wood hit.wav" by VitaWrap (CC BY 4.0)  https://freesound.org/s/345679/
+dirt1                        "Single Rock hit Dirt.wav" by worthahep88 (CC0)  https://freesound.org/s/319222/
+dirt2                        "Single Rock hit dirt 2.wav" by worthahep88 (CC0)  https://freesound.org/s/319229/
+dirt3                        "Bullet impact ground (subsonic) SFX" by modusmogulus (CC0)  https://freesound.org/s/789388/
+gravel1                      "gravel impact 3" by jorickhoofd (CC BY 4.0)  https://freesound.org/s/169557/
+gravel2, gravel3, gravel4, gravel5 "Gravel Impacts and Falls.wav" by lolamadeus (CC0)  https://freesound.org/s/179341/
+gravel6, gravel7, gravel8    "IMPACT GRAVIER" by Julien Nicolas (CC BY 4.0)  https://freesound.org/s/133783/
+gravel9                      "Bullet_Impact_3" by toxicwafflezz (CC BY 3.0)  https://freesound.org/s/150839/
+stone1                       "ROCK_IMPACT_GALETS_OUTDOORS_260128 48" by kevinklang (CC0)  https://freesound.org/s/843547/
+stone2                       "Bullet_Impact_1" by toxicwafflezz (CC BY 3.0)  https://freesound.org/s/150837/
+stone3                       "Guns & Explosions Album - Bullet Impact 14.wav" by OGsoundFX (CC BY 4.0)  https://freesound.org/s/423107/
+stone4                       "Guns & Explosions Album - Bullet Impact 21.wav" by OGsoundFX (CC BY 4.0)  https://freesound.org/s/423106/
+concrete1, concrete2         "Concrete Hit 2" by dslrguide (CC0)  https://freesound.org/s/321478/
+concrete3                    "Concrete Hit " by dslrguide (CC0)  https://freesound.org/s/321477/
+concrete4                    "ROCKImpt_Brick25_InMotionAudio_FREESampleSunday.wav" by InMotionAudio (CC0)  https://freesound.org/s/702860/
+metal1, metal2, metal3, metal4, metal5, metal6 "Foley bullet hit metal 02.wav" by martian (CC0)  https://freesound.org/s/182263/
+metal7                       "metal_hit_1.wav" by BBoz87 (CC BY 4.0)  https://freesound.org/s/671098/
+steel1, steel2, steel3, steel4 "S31-15 Shooting gallery; hitting metal targets.wav" by craigsmith (CC0)  https://freesound.org/s/675951/
+steel5, steel6, steel7, steel8 "rifle_steel plate_multiple ricochettes.mp3" by gezortenplotz (CC BY 3.0)  https://freesound.org/s/43403/
+steel9                       "shot-Bafflebanging-9" by tomlyne (CC BY 4.0)  https://freesound.org/s/833262/
+steel10, steel11, steel12, steel13 "Metal Bullet Ricochets" by mikiko850 (CC BY 4.0)  https://freesound.org/s/854335/
+steel14                      "bulletimpact_metal3.wav" by NoiseCollector (CC BY 3.0)  https://freesound.org/s/237444/
+steel15                      "Dry impact hit metal plate " by jorickhoofd (CC BY 4.0)  https://freesound.org/s/176669/

@@ -42,5 +42,229 @@
         "attenuation_distance": 12
       }
     ]
+  },
+  "bullet.hit.wood": {
+    "sounds": [
+      {
+        "name": "ntmgunfeel:bullet/hit/wood1",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/wood2",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/wood3",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/wood4",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/wood5",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/wood6",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/wood7",
+        "attenuation_distance": 24
+      }
+    ]
+  },
+  "bullet.hit.dirt": {
+    "sounds": [
+      {
+        "name": "ntmgunfeel:bullet/hit/dirt1",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/dirt2",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/dirt3",
+        "attenuation_distance": 24
+      }
+    ]
+  },
+  "bullet.hit.gravel": {
+    "sounds": [
+      {
+        "name": "ntmgunfeel:bullet/hit/gravel1",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/gravel2",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/gravel3",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/gravel4",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/gravel5",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/gravel6",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/gravel7",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/gravel8",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/gravel9",
+        "attenuation_distance": 24
+      }
+    ]
+  },
+  "bullet.hit.stone": {
+    "sounds": [
+      {
+        "name": "ntmgunfeel:bullet/hit/stone1",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/stone2",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/stone3",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/stone4",
+        "attenuation_distance": 24
+      }
+    ]
+  },
+  "bullet.hit.concrete": {
+    "sounds": [
+      {
+        "name": "ntmgunfeel:bullet/hit/concrete1",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/concrete2",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/concrete3",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/concrete4",
+        "attenuation_distance": 24
+      }
+    ]
+  },
+  "bullet.hit.metal": {
+    "sounds": [
+      {
+        "name": "ntmgunfeel:bullet/hit/metal1",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/metal2",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/metal3",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/metal4",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/metal5",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/metal6",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/metal7",
+        "attenuation_distance": 24
+      }
+    ]
+  },
+  "bullet.hit.steel": {
+    "sounds": [
+      {
+        "name": "ntmgunfeel:bullet/hit/steel1",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/steel2",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/steel3",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/steel4",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/steel5",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/steel6",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/steel7",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/steel8",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/steel9",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/steel10",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/steel11",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/steel12",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/steel13",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/steel14",
+        "attenuation_distance": 24
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/steel15",
+        "attenuation_distance": 24
+      }
+    ]
   }
 }

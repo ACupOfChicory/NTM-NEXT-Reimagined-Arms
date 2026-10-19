@@ -7,5 +7,12 @@ break #minecraft:leaves never through
 break #minecraft:planks,#minecraft:wooden_slabs,#minecraft:wooden_stairs,#minecraft:wooden_fences,#minecraft:fence_gates,#minecraft:wooden_doors,#minecraft:wooden_trapdoors,#minecraft:wooden_buttons,#minecraft:wooden_pressure_plates,#minecraft:all_signs,minecraft:bamboo_mosaic,minecraft:crafting_table,minecraft:bookshelf,minecraft:ladder,minecraft:composter,minecraft:note_block,minecraft:loom,minecraft:cartography_table,minecraft:fletching_table,minecraft:smithing_table damage 45 pass pierce=1.5 keep=0.8
 break minecraft:melon,minecraft:pumpkin,minecraft:carved_pumpkin,minecraft:jack_o_lantern hits 4 drop
 hit * particles=block*6,minecraft:smoke*1 sound=block/0.6 range=40
-hit @metal particles=block*4,minecraft:crit*2 sound=hbm:metal_impact/0.5 range=40
+# hit sounds by material (bullet/hit/, see sounds/bullet/CREDITS.txt); later lines win
+hit @wood,@nether_wood,@bamboo_wood,@cherry_wood,@bamboo,@scaffolding,@ladder,@hanging_sign,@nether_wood_hanging_sign,@bamboo_wood_hanging_sign,@cherry_wood_hanging_sign,@chiseled_bookshelf particles=block*6,minecraft:smoke*1 sound=ntmgunfeel:bullet.hit.wood/0.8 range=40
+hit @gravel,@grass,@rooted_dirt,@mud,@sand,@soul_sand,@soul_soil,@moss,@moss_carpet,@packed_mud,@snow,@powder_snow particles=block*6,minecraft:smoke*1 sound=ntmgunfeel:bullet.hit.dirt/0.8 range=40
+hit minecraft:gravel,minecraft:suspicious_gravel particles=block*6,minecraft:smoke*1 sound=ntmgunfeel:bullet.hit.gravel/0.8 range=40
+hit @stone,@deepslate,@deepslate_bricks,@deepslate_tiles,@polished_deepslate,@tuff,@tuff_bricks,@polished_tuff,@calcite,@basalt,@netherrack,@nether_bricks,@nether_ore,@nether_gold_ore,@dripstone_block,@pointed_dripstone,@mud_bricks,@bone_block,@ancient_debris,@gilded_blackstone,@amethyst particles=block*6,minecraft:smoke*1 sound=ntmgunfeel:bullet.hit.stone/0.8 range=40
+hit ~minecraft:.*_concrete,~hbm:.*concrete.*,~hbm:.*ducrete.*,~hbm:asphalt.*,~hbm:cmb_brick.* particles=block*6,minecraft:smoke*1 sound=ntmgunfeel:bullet.hit.concrete/0.8 range=40
+hit @metal,@copper,@copper_bulb,@copper_grate,@chain,@anvil,@heavy_core,@iron,@lantern,@netherite_block,@vault,@trial_spawner particles=block*4,minecraft:crit*2 sound=ntmgunfeel:bullet.hit.metal/0.8 range=40
+hit ~hbm:.*steel.*,hbm:platemetal,~hbm:.*tungsten.*,~hbm:.*titanium.*,~hbm:machine_.*,~hbm:.*_beam,~hbm:.*_poles particles=block*4,minecraft:crit*2 sound=ntmgunfeel:bullet.hit.steel/0.8 range=40
 whizz sound=ntmgunfeel:bullet.whizz/0.9 radius=3 crack=ntmgunfeel:bullet.crack/0.7 crackradius=1.2
