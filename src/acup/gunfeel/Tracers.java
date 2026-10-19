@@ -156,7 +156,7 @@ public final class Tracers {
             model[2] = n.z;
             for (int k = 3; k < model.length; ) {
                 int count = (int) model[k++];
-                for (int i = 0; i < count; i++, k += 5) {
+                for (int i = 0; i < count; i++, k += 6) {
                     Vector3f v = inv.transformPosition(c.x + mesh[k], c.y + mesh[k + 1], c.z + mesh[k + 2], new Vector3f());
                     model[k] = v.x;
                     model[k + 1] = v.y;
@@ -181,18 +181,19 @@ public final class Tracers {
             for (int k = 3; k < model.length; ) {
                 int count = (int) model[k++];
                 List<float[]> poly = new ArrayList<>(count);
-                for (int i = 0; i < count; i++, k += 5) poly.add(new float[] {model[k], model[k + 1], model[k + 2], model[k + 3], model[k + 4]});
+                for (int i = 0; i < count; i++, k += 6) poly.add(new float[] {model[k], model[k + 1], model[k + 2], model[k + 3], model[k + 4], model[k + 5]});
                 if (cut != null) for (float[] plane : cut) poly = keep(poly, plane);
                 if (poly.size() < 3) continue;
-                float[] out = new float[poly.size() * 5];
+                float[] out = new float[poly.size() * 6];
                 for (int i = 0; i < poly.size(); i++) {
                     float[] v = poly.get(i);
                     Vector3f w = placed.transformPosition(v[0], v[1], v[2], new Vector3f());
-                    out[i * 5] = w.x - c.x;
-                    out[i * 5 + 1] = w.y - c.y;
-                    out[i * 5 + 2] = w.z - c.z;
-                    out[i * 5 + 3] = v[3];
-                    out[i * 5 + 4] = v[4];
+                    out[i * 6] = w.x - c.x;
+                    out[i * 6 + 1] = w.y - c.y;
+                    out[i * 6 + 2] = w.z - c.z;
+                    out[i * 6 + 3] = v[3];
+                    out[i * 6 + 4] = v[4];
+                    out[i * 6 + 5] = v[5];
                 }
                 polys.add(out);
             }
@@ -207,7 +208,7 @@ public final class Tracers {
                 m[2] = n.z;
                 int k = 3;
                 for (float[] pl : polys) {
-                    m[k++] = pl.length / 5;
+                    m[k++] = pl.length / 6;
                     System.arraycopy(pl, 0, m, k, pl.length);
                     k += pl.length;
                 }
@@ -234,8 +235,8 @@ public final class Tracers {
                 if (da >= 0) out.add(a);
                 if ((da >= 0) != (db >= 0)) {
                     float t = da / (da - db);
-                    float[] m = new float[5];
-                    for (int j = 0; j < 5; j++) m[j] = a[j] + (b[j] - a[j]) * t;
+                    float[] m = new float[6];
+                    for (int j = 0; j < 6; j++) m[j] = a[j] + (b[j] - a[j]) * t;
                     out.add(m);
                 }
             }
@@ -777,7 +778,7 @@ public final class Tracers {
         mesh[2] = (float) normal.z;
         int k = 3;
         for (double[] pl : polys) {
-            mesh[k++] = pl.length / 5;
+            mesh[k++] = pl.length / 6;
             for (double v : pl) mesh[k++] = (float) v;
         }
         Vec3 world = new Vec3(pos.getX() + at.x, pos.getY() + at.y, pos.getZ() + at.z);
@@ -976,19 +977,17 @@ public final class Tracers {
         int polyCount = 0, hiddenPieces = 0;
         // the point the hole spreads from, a little out of the face: a piece on another block (the ground behind a
         // door, a wall behind bars) goes only where a straight line from it reaches, not round or under the thing hit
+        // several points round it (a small disc on the face) make the shadow's edge soft, like a blast's own size
         Vector3d blast = new Vector3d(normal).mul(0.02).add(world);
-        for (Piece raw : pieces) {
-            boolean elsewhere = raw.tri().block() != null && !raw.tri().block().equals(pos);
-            Piece pc = elsewhere ? reachable(near, raw, blast) : raw;
-            if (pc == null) {
-                hiddenPieces++;
-                continue;
-            }
+        List<Vector3d> blasts = blastPoints(blast, normal, 0.12);
+        Map<List<Long>, Double> lit = new HashMap<>();
+        for (Piece pc : pieces) {
+            boolean elsewhere = pc.tri().block() != null && !pc.tri().block().equals(pos);
             double[] cen = centroid(pc.poly());
             boolean shown = false;
             for (int s = 0; s <= pc.poly().size() && !shown; s++) {
                 double[] sm = s == 0 ? cen : lerp(pc.poly().get(s - 1), cen, 0.2);
-                shown = !hidden(near, pc, sm) && (!elsewhere || !cutOff(near, pc, sm, blast));
+                shown = !hidden(near, pc, sm);
             }
             if (!shown) {
                 hiddenPieces++;
@@ -1039,6 +1038,12 @@ public final class Tracers {
                     }
                 }
             }
+            if (elsewhere && g.polys().size() > before) {
+                List<List<double[]>> made = new ArrayList<>(g.polys().subList(before, g.polys().size()));
+                g.polys().subList(before, g.polys().size()).clear();
+                for (List<double[]> pl : made) shade(near, pc, pl, blasts, lit, g.polys());
+                if (g.polys().size() == before) hiddenPieces++;
+            }
             polyCount += g.polys().size() - before;
         }
         Vec3 hitAt = new Vec3(world.x, world.y, world.z);
@@ -1056,7 +1061,7 @@ public final class Tracers {
             }
             Vector3d at = new Vector3d(cx / n, cy / n, cz / n);
             int count = 3;
-            for (List<double[]> pl : g.polys()) count += 1 + pl.size() * 5;
+            for (List<double[]> pl : g.polys()) count += 1 + pl.size() * 6;
             float[] mesh = new float[count];
             mesh[0] = (float) g.tn().x;
             mesh[1] = (float) g.tn().y;
@@ -1072,6 +1077,7 @@ public final class Tracers {
                     mesh[k++] = (float) (v[4] - at.z);
                     mesh[k++] = tu;
                     mesh[k++] = 1F - tv;
+                    mesh[k++] = v.length > 6 ? (float) v[6] : 1F;
                 }
             }
             BlockPos on = first.block() != null ? first.block() : pos;
@@ -1334,10 +1340,6 @@ public final class Tracers {
     }
 
     // a shown pixel of another triangle lies on the straight line from this point of the piece to the hit
-    private static boolean cutOff(List<RenderedMesh.Tri> near, Piece self, double[] at, Vector3d blast) {
-        return blocker(near, self, at, blast) != null;
-    }
-
     private static RenderedMesh.Tri blocker(List<RenderedMesh.Tri> near, Piece self, double[] at, Vector3d blast) {
         Vector3d from = new Vector3d(at[2], at[3], at[4]).fma(1e-3, self.tn());
         Vector3d d = new Vector3d(blast).sub(from);
@@ -1355,45 +1357,64 @@ public final class Tracers {
         return null;
     }
 
-    // a piece on another block cut down to what the hit reaches: while a point of it is shut off from the hit, the part
-    // on the far side of the plane of what shuts it off goes (the ground under a door: the strip in front stays)
-    private static Piece reachable(List<RenderedMesh.Tri> near, Piece pc, Vector3d blast) {
-        List<double[]> poly = pc.poly();
-        for (int it = 0; it < 6 && poly.size() >= 3; it++) {
-            double[] cen = centroid(poly);
-            RenderedMesh.Tri o = null;
-            for (int s = 0; s <= poly.size() && o == null; s++) o = blocker(near, pc, s == 0 ? cen : lerp(poly.get(s - 1), cen, 0.2), blast);
-            if (o == null) break;
-            Vector3d a = o.corner(0), n = o.corner(1).sub(a).cross(o.corner(2).sub(a));
-            if (n.lengthSquared() < 1e-18) break;
-            n.normalize();
-            double c = n.dot(a), side = n.dot(blast) - c;
-            if (Math.abs(side) < 1e-5) return null;
-            if (side < 0) {
-                n.negate();
-                c = -c;
-            }
-            poly = cutPlane(poly, n, c + 1e-4);
-        }
-        if (poly.size() < 3) return null;
-        return poly == pc.poly() ? pc : new Piece(pc.tri(), poly, pc.tn(), pc.plane(), box2(poly), pc.back(), pc.pivot(), pc.frame());
-    }
-
-    // the part of the polygon with n . (x, y, z) >= c
-    private static List<double[]> cutPlane(List<double[]> poly, Vector3d n, double c) {
-        List<double[]> out = new ArrayList<>(poly.size() + 2);
-        for (int i = 0; i < poly.size(); i++) {
-            double[] a = poly.get(i), b = poly.get((i + 1) % poly.size());
-            double da = n.x * a[2] + n.y * a[3] + n.z * a[4] - c, db = n.x * b[2] + n.y * b[3] + n.z * b[4] - c;
-            if (da >= 0) out.add(a);
-            if ((da >= 0) != (db >= 0)) {
-                double t = da / (da - db);
-                double[] m = new double[a.length];
-                for (int j = 0; j < a.length; j++) m[j] = a[j] + (b[j] - a[j]) * t;
-                out.add(m);
-            }
+    // the centre and eight points on a circle of radius r round it, in the plane across n
+    private static List<Vector3d> blastPoints(Vector3d c, Vector3d n, double r) {
+        Vector3d a = Math.abs(n.y) < 0.9 ? new Vector3d(0, 1, 0) : new Vector3d(1, 0, 0);
+        Vector3d t1 = new Vector3d(n).cross(a).normalize(), t2 = new Vector3d(n).cross(t1).normalize();
+        List<Vector3d> out = new ArrayList<>(9);
+        out.add(new Vector3d(c));
+        for (int i = 0; i < 8; i++) {
+            double ang = i * Math.PI / 4;
+            out.add(new Vector3d(c).fma(r * Math.cos(ang), t1).fma(r * Math.sin(ang), t2));
         }
         return out;
+    }
+
+    // how much of the blast reaches a point: the share of the blast's points with a clear line to it, eased
+    private static double reach(List<RenderedMesh.Tri> near, Piece self, double[] v, List<Vector3d> blasts, Map<List<Long>, Double> lit) {
+        List<Long> key = List.of(Math.round(v[2] * 1e5), Math.round(v[3] * 1e5), Math.round(v[4] * 1e5));
+        Double got = lit.get(key);
+        if (got != null) return got;
+        int clear = 0;
+        for (Vector3d b : blasts) if (blocker(near, self, v, b) == null) clear++;
+        double x = (double) clear / blasts.size();
+        double a = x * x * (3 - 2 * x);
+        lit.put(key, a);
+        return a;
+    }
+
+    // a polygon of a hole on another block, shaded by what stands between it and the blast: whole where it is all
+    // reached, nothing where none of it is, else cells of 1/16 block (on the hole's u, v) with their vertices' share
+    // as alpha, so the shadow's edge fades
+    private static void shade(List<RenderedMesh.Tri> near, Piece self, List<double[]> poly, List<Vector3d> blasts, Map<List<Long>, Double> lit,
+            List<List<double[]>> out) {
+        double cs = 1.0 / 16;
+        double[] box = box2(poly);
+        int i0 = (int) Math.floor(box[0] / cs), i1 = (int) Math.ceil(box[1] / cs), j0 = (int) Math.floor(box[2] / cs), j1 = (int) Math.ceil(box[3] / cs);
+        List<List<double[]>> cells = new ArrayList<>();
+        boolean all = true, none = true;
+        for (int j = j0; j < j1; j++) for (int i = i0; i < i1; i++) {
+            List<double[]> r = cut(cut(cut(cut(poly, 0, i * cs, true), 0, (i + 1) * cs, false), 1, j * cs, true), 1, (j + 1) * cs, false);
+            if (r.size() < 3) continue;
+            List<double[]> withA = new ArrayList<>(r.size());
+            boolean any = false;
+            for (double[] v : r) {
+                double a = reach(near, self, v, blasts, lit);
+                double[] w = java.util.Arrays.copyOf(v, 7);
+                if (v.length < 6) w[5] = 0;
+                w[6] = a;
+                withA.add(w);
+                if (a < 1) all = false;
+                if (a > 0) {
+                    any = true;
+                    none = false;
+                }
+            }
+            if (any) cells.add(withA);
+        }
+        if (none) return;
+        if (all) out.add(poly);
+        else out.addAll(cells);
     }
 
     // a shown pixel of another triangle is in front of this point of the piece, towards the shooter
@@ -1539,7 +1560,7 @@ public final class Tracers {
     // a cut polygon as x, y, z from the hole's centre and the hole texture's u, v (turned / mirrored like quad())
     private static void addPoly(List<double[]> polys, List<Vector3d> poly, Vector3d at, Vector3d t1, Vector3d t2, double half, int turn) {
         if (poly.size() < 3) return;
-        double[] out = new double[poly.size() * 5];
+        double[] out = new double[poly.size() * 6];
         int k = 0;
         for (Vector3d p : poly) {
             Vector3d r = new Vector3d(p).sub(at);
@@ -1550,6 +1571,7 @@ public final class Tracers {
             out[k++] = r.z;
             out[k++] = tu;
             out[k++] = 1F - tv;
+            out[k++] = 1;
         }
         polys.add(out);
     }
@@ -1583,12 +1605,12 @@ public final class Tracers {
             for (int i = 1; i + 1 < n; i += 2) {
                 int[] idx = {0, i, i + 1, Math.min(i + 2, n - 1)};
                 for (int j : idx) {
-                    int o = base + j * 5;
-                    vc.addVertex(p, (bx + m[o]) * toward, (by + m[o + 1]) * toward, (bz + m[o + 2]) * toward).setColor(color).setUv(m[o + 3], m[o + 4])
+                    int o = base + j * 6;
+                    vc.addVertex(p, (bx + m[o]) * toward, (by + m[o + 1]) * toward, (bz + m[o + 2]) * toward).setColor(m[o + 5] >= 1F ? color : ((int) (alpha * m[o + 5]) << 24) | 0xFFFFFF).setUv(m[o + 3], m[o + 4])
                             .setOverlay(OverlayTexture.NO_OVERLAY).setLight(light).setNormal(p, nx, ny, nz);
                 }
             }
-            k = base + n * 5;
+            k = base + n * 6;
         }
     }
 
@@ -2212,10 +2234,10 @@ public final class Tracers {
         while (k < m.length) {
             int n = (int) m[k++];
             int base = k;
-            k = base + n * 5;
+            k = base + n * 6;
             float sign = 0F;
             for (int i = 1; i + 1 < n && sign == 0F; i++) {
-                int a = base, q = base + i * 5, r = base + (i + 1) * 5;
+                int a = base, q = base + i * 6, r = base + (i + 1) * 6;
                 float ux = m[q] - m[a], uy = m[q + 1] - m[a + 1], uz = m[q + 2] - m[a + 2];
                 float wx = m[r] - m[a], wy = m[r + 1] - m[a + 1], wz = m[r + 2] - m[a + 2];
                 float d = (uy * wz - uz * wy) * nx + (uz * wx - ux * wz) * ny + (ux * wy - uy * wx) * nz;
@@ -2227,8 +2249,8 @@ public final class Tracers {
                 for (int i = 1; i + 1 < n; i += 2) {
                     int[] idx = {0, i, i + 1, Math.min(i + 2, n - 1)};
                     for (int t = 0; t < 4; t++) {
-                        int o = base + idx[rev ? (4 - t) % 4 : t] * 5;
-                        vc.addVertex(p, bx + m[o], by + m[o + 1], bz + m[o + 2]).setColor(0xFFFFFFFF).setUv(m[o + 3], m[o + 4])
+                        int o = base + idx[rev ? (4 - t) % 4 : t] * 6;
+                        vc.addVertex(p, bx + m[o], by + m[o + 1], bz + m[o + 2]).setColor(((int) (255 * m[o + 5]) << 24) | 0xFFFFFF).setUv(m[o + 3], m[o + 4])
                                 .setOverlay(OverlayTexture.NO_OVERLAY).setLight(light).setNormal(p, sign * nx, sign * ny, sign * nz);
                     }
                 }
