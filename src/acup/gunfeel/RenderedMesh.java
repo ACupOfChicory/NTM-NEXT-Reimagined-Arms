@@ -138,13 +138,21 @@ public final class RenderedMesh {
 
         // barycentric weights of a point in the triangle's plane (null when outside it, by more than eps)
         public double @Nullable [] weights(Vector3d pt, double eps) {
-            Vector3d a = corner(0), e0 = corner(1).sub(a), e1 = corner(2).sub(a), e2 = new Vector3d(pt).sub(a);
-            double d00 = e0.dot(e0), d01 = e0.dot(e1), d11 = e1.dot(e1), d20 = e2.dot(e0), d21 = e2.dot(e1);
+            // as JOML's sub and dot work them out (fused multiply-adds, the same order), without new vectors
+            double ax = p[0], ay = p[1], az = p[2];
+            double e0x = p[3] - ax, e0y = p[4] - ay, e0z = p[5] - az, e1x = p[6] - ax, e1y = p[7] - ay, e1z = p[8] - az;
+            double e2x = pt.x - ax, e2y = pt.y - ay, e2z = pt.z - az;
+            double d00 = dot(e0x, e0y, e0z, e0x, e0y, e0z), d01 = dot(e0x, e0y, e0z, e1x, e1y, e1z), d11 = dot(e1x, e1y, e1z, e1x, e1y, e1z);
+            double d20 = dot(e2x, e2y, e2z, e0x, e0y, e0z), d21 = dot(e2x, e2y, e2z, e1x, e1y, e1z);
             double den = d00 * d11 - d01 * d01;
             if (Math.abs(den) < 1e-18) return null;
             double wb = (d11 * d20 - d01 * d21) / den, wc = (d00 * d21 - d01 * d20) / den, wa = 1 - wb - wc;
             if (wa < -eps || wb < -eps || wc < -eps) return null;
             return new double[] {wa, wb, wc};
+        }
+
+        private static double dot(double x, double y, double z, double vx, double vy, double vz) {
+            return org.joml.Math.fma(x, vx, org.joml.Math.fma(y, vy, z * vz));
         }
 
         public boolean opaqueAt(double[] w) {
@@ -155,18 +163,20 @@ public final class RenderedMesh {
 
         // where the line from o along d meets it, as a distance along d; NaN = it does not
         public double cross(Vector3d o, Vector3d d) {
-            Vector3d a = corner(0), e1 = corner(1).sub(a), e2 = corner(2).sub(a);
-            Vector3d h = new Vector3d(d).cross(e2);
-            double det = e1.dot(h);
+            double ax = p[0], ay = p[1], az = p[2];
+            double e1x = p[3] - ax, e1y = p[4] - ay, e1z = p[5] - az, e2x = p[6] - ax, e2y = p[7] - ay, e2z = p[8] - az;
+            // h = d x e2 (JOML's cross: fma(y, v.z, -z * v.y) ...)
+            double hx = org.joml.Math.fma(d.y, e2z, -d.z * e2y), hy = org.joml.Math.fma(d.z, e2x, -d.x * e2z), hz = org.joml.Math.fma(d.x, e2y, -d.y * e2x);
+            double det = dot(e1x, e1y, e1z, hx, hy, hz);
             if (Math.abs(det) < 1e-12) return Double.NaN;
             double f = 1 / det;
-            Vector3d s = new Vector3d(o).sub(a);
-            double u = f * s.dot(h);
+            double sx = o.x - ax, sy = o.y - ay, sz = o.z - az;
+            double u = f * dot(sx, sy, sz, hx, hy, hz);
             if (u < -1e-6 || u > 1 + 1e-6) return Double.NaN;
-            Vector3d q = new Vector3d(s).cross(e1);
-            double v = f * d.dot(q);
+            double qx = org.joml.Math.fma(sy, e1z, -sz * e1y), qy = org.joml.Math.fma(sz, e1x, -sx * e1z), qz = org.joml.Math.fma(sx, e1y, -sy * e1x);
+            double v = f * dot(d.x, d.y, d.z, qx, qy, qz);
             if (v < -1e-6 || u + v > 1 + 1e-6) return Double.NaN;
-            return f * e2.dot(q);
+            return f * dot(e2x, e2y, e2z, qx, qy, qz);
         }
     }
 
