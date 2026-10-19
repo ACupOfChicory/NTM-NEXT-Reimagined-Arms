@@ -1249,6 +1249,35 @@ public final class Arms {
         return "screen hand=" + screenText(clip, cx, top) + " cut=" + screenText(clip, cx, cut) + " vis=" + Math.round(100F * in / all) + "%";
     }
 
+    // Sexy's bottle as NTM drew it last (armdebug only), and when
+    private static final Matrix4f bottle = new Matrix4f();
+    private static long bottleAt = -1000L;
+
+    public static void bottleDrawn(Matrix4f pose) {
+        bottle.set(pose);
+        bottleAt = System.currentTimeMillis();
+    }
+
+    // the bottle's share on screen (whiskey model: x, z -0.5..0.5, y 0..3) and its middle, or "" when not drawn now
+    private static String bottleOnScreen() {
+        if (System.currentTimeMillis() - bottleAt > 100L) return "";
+        var mc = Minecraft.getInstance();
+        float fov = com.hbm.render.item.weapon.sedna.ItemRenderWeaponBase.adjustHudFov(70F);
+        float aspect = (float) mc.getWindow().getWidth() / Math.max(1, mc.getWindow().getHeight());
+        Matrix4f clip = new Matrix4f().perspective((float) Math.toRadians(fov), aspect, 0.05F, 100F)
+                .mul(new Matrix4f(com.mojang.blaze3d.systems.RenderSystem.getModelViewStack())).mul(bottle);
+        int in = 0, all = 0;
+        for (int k = 0; k <= 8; k++) {
+            float y = 3F * k / 8F;
+            for (int a = -1; a <= 1; a++) for (int b = -1; b <= 1; b++) {
+                if (a == 0 && b == 0) continue;
+                all++;
+                if (screenPoint(clip, a * 0.5F, y, b * 0.5F) != null) in++;
+            }
+        }
+        return " bottle=" + screenText(clip, 0F, 1.5F) + " vis=" + Math.round(100F * in / all) + "%";
+    }
+
     private static float[] screenPoint(Matrix4f clip, float x, float y, float z) {
         org.joml.Vector4f v = clip.transform(new org.joml.Vector4f(x, y, z, 1F));
         if (v.w <= 1e-4F) return null;
@@ -1399,7 +1428,7 @@ public final class Arms {
             Vector3f along = m.transformDirection(new Vector3f(0F, 1F, 0F));
             GunFeel.LOGGER.info("[armdebug] {} {} t={} {} | {} | origin={} up={} crop={} | {}", right ? "R" : "L",
                     HbmAnimations.getRelevantAnim(0) == null ? "-" : type, fmt(animMillis()), branch, right ? "" : branchNote,
-                    fmt(origin), fmt(along), shown, onScreen(m, shown, right, slim));
+                    fmt(origin), fmt(along), shown, onScreen(m, shown, right, slim) + (right ? "" : bottleOnScreen()));
             branchNote = "";
         }
         PoseStack pose = new PoseStack();
