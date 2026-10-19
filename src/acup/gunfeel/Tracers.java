@@ -974,12 +974,16 @@ public final class Tracers {
         Map<Object, Group> groups = new java.util.LinkedHashMap<>();
         double cs = 1.0 / 32;
         int polyCount = 0, hiddenPieces = 0;
+        // the point the hole spreads from, a little out of the face: a piece on another block (the ground behind a
+        // door, a wall behind bars) goes only where a straight line from it reaches, not round or under the thing hit
+        Vector3d blast = new Vector3d(normal).mul(0.02).add(world);
         for (Piece pc : pieces) {
+            boolean elsewhere = pc.tri().block() != null && !pc.tri().block().equals(pos);
             double[] cen = centroid(pc.poly());
             boolean shown = false;
             for (int s = 0; s <= pc.poly().size() && !shown; s++) {
                 double[] sm = s == 0 ? cen : lerp(pc.poly().get(s - 1), cen, 0.2);
-                shown = !hidden(near, pc, sm);
+                shown = !hidden(near, pc, sm) && (!elsewhere || !cutOff(near, pc, sm, blast));
             }
             if (!shown) {
                 hiddenPieces++;
@@ -1322,6 +1326,24 @@ public final class Tracers {
         double[] c = new double[a.length];
         for (int i = 0; i < c.length; i++) c[i] = a[i] + (b[i] - a[i]) * t;
         return c;
+    }
+
+    // a shown pixel of another triangle lies on the straight line from this point of the piece to the hit
+    private static boolean cutOff(List<RenderedMesh.Tri> near, Piece self, double[] at, Vector3d blast) {
+        Vector3d from = new Vector3d(at[2], at[3], at[4]).fma(1e-3, self.tn());
+        Vector3d d = new Vector3d(blast).sub(from);
+        double len = d.length();
+        if (len < 1e-4) return false;
+        d.div(len);
+        AABB line = new AABB(from.x, from.y, from.z, blast.x, blast.y, blast.z);
+        for (RenderedMesh.Tri o : near) {
+            if (o == self.tri() || !o.meets(line)) continue;
+            double k = o.cross(from, d);
+            if (Double.isNaN(k) || k <= 1e-4 || k >= len - 1e-4) continue;
+            double[] w = o.weights(new Vector3d(d).mul(k).add(from), 1e-6);
+            if (w != null && o.opaqueAt(w)) return true;
+        }
+        return false;
     }
 
     // a shown pixel of another triangle is in front of this point of the piece, towards the shooter
