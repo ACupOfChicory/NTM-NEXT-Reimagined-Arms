@@ -107,6 +107,18 @@ final class TriGrid {
     // the first triangle (in the order the line meets the boxes) whose bounds meet the bounds of the line from a to
     // b and that passes the test; null = none
     RenderedMesh.Tri first(Vector3d a, Vector3d b, Predicate<RenderedMesh.Tri> test) {
+        int[] got = {-1};
+        each(a, b, t -> {
+            if (!test.test(tris.get(t))) return false;
+            got[0] = t;
+            return true;
+        });
+        return got[0] < 0 ? null : tris.get(got[0]);
+    }
+
+    // each triangle (its index in the list) whose bounds meet the bounds of the line from a to b, once, until visit
+    // says stop
+    void each(Vector3d a, Vector3d b, java.util.function.IntPredicate visit) {
         next();
         double lx = Math.min(a.x, b.x), hx = Math.max(a.x, b.x), ly = Math.min(a.y, b.y), hy = Math.max(a.y, b.y);
         double lz = Math.min(a.z, b.z), hz = Math.max(a.z, b.z);
@@ -117,14 +129,14 @@ final class TriGrid {
         double[][] slab = {{a.x, dx, x0, x0 + nx * cs}, {a.y, dy, y0, y0 + ny * cs}, {a.z, dz, z0, z0 + nz * cs}};
         for (double[] sl : slab) {
             if (Math.abs(sl[1]) < 1e-15) {
-                if (sl[0] < sl[2] || sl[0] > sl[3]) return null;
+                if (sl[0] < sl[2] || sl[0] > sl[3]) return;
                 continue;
             }
             double ta = (sl[2] - sl[0]) / sl[1], tb = (sl[3] - sl[0]) / sl[1];
             t0 = Math.max(t0, Math.min(ta, tb));
             t1 = Math.min(t1, Math.max(ta, tb));
         }
-        if (t0 > t1) return null;
+        if (t0 > t1) return;
         double sx = a.x + dx * t0, sy = a.y + dy * t0, sz = a.z + dz * t0;
         int i = cx(sx), j = cy(sy), k = cz(sz);
         int ie = cx(a.x + dx * t1), je = cy(a.y + dy * t1), ke = cz(a.z + dz * t1);
@@ -137,8 +149,7 @@ final class TriGrid {
         double tmz = sk > 0 ? (z0 + (k + 1) * cs - a.z) / dz : sk < 0 ? (z0 + k * cs - a.z) / dz : Double.POSITIVE_INFINITY;
         int guard = nx + ny + nz + 3;
         while (true) {
-            RenderedMesh.Tri got = cellFirst(i, j, k, lx, hx, ly, hy, lz, hz, test);
-            if (got != null) return got;
+            if (cellEach(i, j, k, lx, hx, ly, hy, lz, hz, visit)) return;
             if ((i == ie && j == je && k == ke) || --guard < 0) break;
             if (tmx <= tmy && tmx <= tmz) {
                 i += si;
@@ -152,15 +163,14 @@ final class TriGrid {
             }
             if (i < 0 || j < 0 || k < 0 || i >= nx || j >= ny || k >= nz) break;
         }
-        return null;
     }
 
-    private RenderedMesh.Tri cellFirst(int i, int j, int k, double lx, double hx, double ly, double hy, double lz, double hz, Predicate<RenderedMesh.Tri> test) {
+    private boolean cellEach(int i, int j, int k, double lx, double hx, double ly, double hy, double lz, double hz, java.util.function.IntPredicate visit) {
         for (int t : cells[(i * ny + j) * nz + k]) {
             if (seen[t] == stamp) continue;
             seen[t] = stamp;
-            if (boundsMeet(t, lx, hx, ly, hy, lz, hz) && test.test(tris.get(t))) return tris.get(t);
+            if (boundsMeet(t, lx, hx, ly, hy, lz, hz) && visit.test(t)) return true;
         }
-        return null;
+        return false;
     }
 }

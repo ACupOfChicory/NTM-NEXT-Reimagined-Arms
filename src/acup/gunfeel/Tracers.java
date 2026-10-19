@@ -929,22 +929,28 @@ public final class Tracers {
         // where it came in: never its far inner face, seen through its window)
         double reachTo = shape == null ? 1.0 + Math.max(1.0, through) : PassableClip.shell(shape) ? 1.1 : 1.15;
         Vector3d o = new Vector3d(hit.getLocation().x, hit.getLocation().y, hit.getLocation().z).sub(new Vector3d(d));
-        double best = Double.POSITIVE_INFINITY;
-        RenderedMesh.Tri met = null;
-        for (RenderedMesh.Tri t : tris) {
+        // the nearest shown pixel on the line (of two as near, the one first in the list), looked for only among the
+        // triangles in the grid boxes the line passes
+        double[] bestK = {Double.POSITIVE_INFINITY};
+        int[] bestAt = {-1};
+        new TriGrid(tris).each(o, new Vector3d(d).mul(reachTo).add(o), i -> {
+            RenderedMesh.Tri t = tris.get(i);
             double k = t.cross(o, d);
             double from = !plain.contains(t) ? 0.0 : shape != null && pos.equals(t.block()) ? 0.89 : 0.99;
-            if (Double.isNaN(k) || k > reachTo || k >= best || k < from) continue;
+            if (Double.isNaN(k) || k > reachTo || k < from || k > bestK[0] || (k == bestK[0] && i > bestAt[0])) return false;
             if (t.oneSided()) {
                 Vector3d tn = t.normal();
-                if (tn == null || tn.dot(d) > 0) continue;
+                if (tn == null || tn.dot(d) > 0) return false;
             }
             Vector3d pt = new Vector3d(d).mul(k).add(o);
             double[] w = t.weights(pt, 1e-4);
-            if (w == null || !t.opaqueAt(w)) continue;
-            best = k;
-            met = t;
-        }
+            if (w == null || !t.opaqueAt(w)) return false;
+            bestK[0] = k;
+            bestAt[0] = i;
+            return false;
+        });
+        double best = bestK[0];
+        RenderedMesh.Tri met = bestAt[0] < 0 ? null : tris.get(bestAt[0]);
         long st3 = System.nanoTime();
         if (debugHoles) debugCandidates(tris, plain, o, d, reachTo, shape, pos, drawn, reaches[0], met, best);
         if (met == null) return drawn || reaches[0];
