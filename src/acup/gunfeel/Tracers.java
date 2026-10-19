@@ -637,6 +637,9 @@ public final class Tracers {
     // /gunfeel holedebug: every hit and how its hole was placed, to the log ("[holedebug]")
     public static volatile boolean debugHoles;
 
+    // where a polygon vertex keeps its alpha (shade()): after u, v, x, y, z, depth and the face's texture u, v (piece())
+    private static final int ALPHA = 8;
+
     private static String ms(long ns) {
         return String.format(java.util.Locale.ROOT, "%.1f", ns / 1e6);
     }
@@ -1146,7 +1149,7 @@ public final class Tracers {
                     mesh[k++] = (float) (v[4] - at.z);
                     mesh[k++] = tu;
                     mesh[k++] = 1F - tv;
-                    mesh[k++] = v.length > 6 ? (float) v[6] : 1F;
+                    mesh[k++] = v.length > ALPHA ? (float) v[ALPHA] : 1F;
                 }
             }
             BlockPos on = first.block() != null ? first.block() : pos;
@@ -1485,9 +1488,8 @@ public final class Tracers {
             boolean any = false;
             for (double[] v : r) {
                 double a = reach(near, self, v, blasts, lit);
-                double[] w = java.util.Arrays.copyOf(v, 7);
-                if (v.length < 6) w[5] = 0;
-                w[6] = a;
+                double[] w = java.util.Arrays.copyOf(v, Math.max(v.length, ALPHA + 1));
+                w[ALPHA] = a;
                 withA.add(w);
                 if (a < 1) all = false;
                 if (a > 0) {
