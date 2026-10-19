@@ -498,14 +498,14 @@ public final class Tracers {
             if (Config.bulletHoles && len > 1e-6) addHole(level, block, s.config, dir.scale(1.0 / len));
             Perf.add(Perf.HOLE_MAKE, ph);
             long px = Perf.start();
-            if (len > 1e-6) BulletFx.blockHit(level, block, dir.scale(1.0 / len));
+            if (len > 1e-6) BulletFx.blockHit(level, block, dir.scale(1.0 / len), s.config.onImpact != null);
             Perf.add(Perf.FX, px);
         }
         if (!s.whizzed) s.whizzed = BulletFx.whizz(level, s.owner, ra, stop, s.speed);
         // blocks it flew through on the way (leaves): their crumbs, no hole
         if (len > 1e-6) {
             double far = stop.distanceToSqr(ra);
-            for (BlockHitResult h : through) if (h.getLocation().distanceToSqr(ra) < far) BulletFx.blockHit(level, h, dir.scale(1.0 / len));
+            for (BlockHitResult h : through) if (h.getLocation().distanceToSqr(ra) < far) BulletFx.blockHit(level, h, dir.scale(1.0 / len), s.config.onImpact != null);
         }
         s.checked = t;
     }

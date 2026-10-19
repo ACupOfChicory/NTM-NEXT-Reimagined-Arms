@@ -59,7 +59,7 @@ public final class GripCommand {
                 }))
                 .then(Commands.literal("hitvolume").executes(c -> {
                     c.getSource().sendSuccess(() -> Component.literal("Громкость попаданий: " + Config.hitVolume
-                            + " (1 = как в правилах, 0 = тихо, до 4). /gunfeel hitvolume <число>"), false);
+                            + " (1 = как в правилах, 0 = тихо, до 4; у взрывных не больше 1). /gunfeel hitvolume <число>"), false);
                     return 1;
                 }).then(Commands.argument("volume", FloatArgumentType.floatArg(0F, 4F)).executes(c -> {
                     float v = FloatArgumentType.getFloat(c, "volume");

@@ -61,6 +61,11 @@ public final class BulletFx {
     }
 
     public static void blockHit(ClientLevel level, BlockHitResult hit, Vec3 dir) {
+        blockHit(level, hit, dir, false);
+    }
+
+    // explosive: a round that blows up there; its own blast is loud enough, the hit sound stays at the rule's volume
+    public static void blockHit(ClientLevel level, BlockHitResult hit, Vec3 dir, boolean explosive) {
         BlockState state = level.getBlockState(hit.getBlockPos());
         if (debugSound) sd("hit {} {} at {}", BuiltInRegistries.BLOCK.getKey(state.getBlock()), hit.getBlockPos().toShortString(), hit.getLocation());
         if (!Config.bulletFx) {
@@ -155,7 +160,7 @@ public final class BulletFx {
             return;
         }
         if (debugSound) sd("  rule sound {} -> {} (families {})", s.id(), e.location(), id.equals(s.id()) ? "none" : "yes");
-        float volume = s.volume() * Config.hitVolume;
+        float volume = s.volume() * (explosive ? Math.min(1F, Config.hitVolume) : Config.hitVolume);
         if (volume <= 0F) {
             sd("  not played: hitVolume 0");
             return;

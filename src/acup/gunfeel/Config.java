@@ -84,7 +84,7 @@ public final class Config {
     public static boolean instantSwitch = true;
     public static boolean bulletFx = true;
     // loudness of bullet hit sounds, times the rule's volume; above 1 the sound is doubled up (Minecraft stops at 1)
-    public static float hitVolume = 1F;
+    public static float hitVolume = 2F;
     public static boolean holeCache = true;
     // arm thickness before armScale, the same on every gun (Maresleg / Old Classic); 0 = grows with the arm's length
     public static float armBaseRight = 1.70F;
@@ -208,7 +208,8 @@ public final class Config {
             bulletFx: particles and sounds of bullets (block hits, a bullet whizzing past, the in-flight sound) by the
               rules in config/ntm-gunfeel-bullets.txt
             hitVolume: loudness of bullet hit sounds, times each hit rule's volume (1 = as the rules say, 0 = silent, up to 4;
-              above 1 the same sound is played several times at once, Minecraft goes no louder than 1). /gunfeel hitvolume
+              above 1 the same sound is played several times at once, Minecraft goes no louder than 1; explosive rounds
+              no louder than 1, their blast is loud enough). /gunfeel hitvolume
             holeCache: bullet holes kept on the graphics card in batches, rebuilt only when a hole comes or goes, not
               every frame (false = the old way, every hole sent again each frame)
             Every value except enabled can be overridden per gun in config/ntm-gunfeel-guns.properties
