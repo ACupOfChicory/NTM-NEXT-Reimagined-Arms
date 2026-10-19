@@ -16,6 +16,8 @@ public final class GunFeelMod {
         }
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(net.neoforged.neoforge.event.RegisterCommandsEvent.class,
                 e -> ReaimCommand.register(e.getDispatcher()));
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(net.neoforged.neoforge.event.tick.ServerTickEvent.Post.class,
+                e -> BulletServer.tick());
         modBus.addListener(RegisterPayloadHandlersEvent.class, e -> {
             // optional: a client or server without this mod still connects
             PayloadRegistrar r = e.registrar("1").optional();
