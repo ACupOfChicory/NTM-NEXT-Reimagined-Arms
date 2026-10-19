@@ -57,6 +57,12 @@ public final class GripCommand {
                     c.getSource().sendSuccess(() -> Component.literal(on ? "Отладка рук включена: каждый кадр пишется в лог ([armdebug])" : "Отладка рук выключена"), false);
                     return 1;
                 }))
+                .then(Commands.literal("sounddebug").executes(c -> {
+                    BulletFx.debugSound = !BulletFx.debugSound;
+                    boolean on = BulletFx.debugSound;
+                    c.getSource().sendSuccess(() -> Component.literal(on ? "Отладка звуков включена: каждое попадание пишется в лог ([sounddebug])" : "Отладка звуков выключена"), false);
+                    return 1;
+                }))
                 .then(Commands.literal("holedebug").executes(c -> {
                     Tracers.debugHoles = !Tracers.debugHoles;
                     PassableClip.debug = Tracers.debugHoles;

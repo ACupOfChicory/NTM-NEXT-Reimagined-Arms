@@ -53,12 +53,29 @@ public final class BulletFx {
         return id + ".f" + (last[1] + 1);
     }
 
+    // /gunfeel sounddebug: every hit's sound, what was picked and why it played or not, to the log ("[sounddebug]")
+    public static volatile boolean debugSound;
+
+    private static void sd(String fmt, Object... args) {
+        if (debugSound) GunFeel.LOGGER.info("[sounddebug] " + fmt, args);
+    }
+
     public static void blockHit(ClientLevel level, BlockHitResult hit, Vec3 dir) {
-        if (!Config.bulletFx) return;
         BlockState state = level.getBlockState(hit.getBlockPos());
-        if (state.isAir()) return;
+        if (debugSound) sd("hit {} {} at {}", BuiltInRegistries.BLOCK.getKey(state.getBlock()), hit.getBlockPos().toShortString(), hit.getLocation());
+        if (!Config.bulletFx) {
+            sd("  skipped: bulletFx off in the config");
+            return;
+        }
+        if (state.isAir()) {
+            sd("  skipped: air there on the client");
+            return;
+        }
         BulletRules.Effect fx = BulletRules.hit(state);
-        if (fx.empty()) return;
+        if (fx.empty()) {
+            sd("  skipped: no hit rule gives it particles or a sound");
+            return;
+        }
         Vec3 at = hit.getLocation();
         Direction face = hit.getDirection();
         Vec3 hitAt = at;
@@ -127,9 +144,17 @@ public final class BulletFx {
             }
         }
         BulletRules.Sound s = fx.sound();
-        if (s == null) return;
-        SoundEvent e = s.id().equalsIgnoreCase("block") ? state.getSoundType().getHitSound() : event(familyOf(s.id(), r));
-        if (e == null) return;
+        if (s == null) {
+            sd("  no sound: its hit rule has none");
+            return;
+        }
+        String id = s.id().equalsIgnoreCase("block") ? "block" : familyOf(s.id(), r);
+        SoundEvent e = id.equals("block") ? state.getSoundType().getHitSound() : event(id);
+        if (e == null) {
+            sd("  no sound: bad sound id {}", s.id());
+            return;
+        }
+        if (debugSound) sd("  rule sound {} -> {} (families {})", s.id(), e.location(), id.equals(s.id()) ? "none" : "yes");
         play(level, at, e, s.volume(), s.pitch() * (0.9F + r.nextFloat() * 0.2F), fx.range());
     }
 
@@ -141,22 +166,25 @@ public final class BulletFx {
         if (range > 16F) {
             Vec3 ear = Minecraft.getInstance().gameRenderer.mainCamera().position();
             double d = at.distanceTo(ear);
-            if (d >= range) return;
+            if (d >= range) {
+                if (debugSound) sd("  not played: {} blocks away, beyond its range {}", String.format("%.1f", d), range);
+                return;
+            }
             p = ear.add(at.subtract(ear).scale(16.0 / range));
         }
         var inst = new net.minecraft.client.resources.sounds.SimpleSoundInstance(e, SoundSource.PLAYERS, volume, pitch,
                 RandomSource.create(level.getRandom().nextLong()), p.x, p.y, p.z);
         var sm = Minecraft.getInstance().getSoundManager();
         var result = sm.play(inst);
-        // diagnostics for "no hit sounds": the first plays of each event, what the sound engine made of them
-        if (PLAY_NOTED.merge(e.location().toString(), 1, Integer::sum) <= 3)
-            GunFeel.LOGGER.info("Bullet sound {}: known {}, volume {}, pitch {}, {} blocks away (set at {}), result {}, active {}",
-                    e.location(), sm.getSoundEvent(e.location()) != null, String.format("%.2f", volume), String.format("%.2f", pitch),
-                    String.format("%.1f", at.distanceTo(Minecraft.getInstance().gameRenderer.mainCamera().position())),
-                    String.format("%.1f", p.distanceTo(Minecraft.getInstance().gameRenderer.mainCamera().position())), result, sm.isActive(inst));
+        if (debugSound) {
+            Vec3 ear = Minecraft.getInstance().gameRenderer.mainCamera().position();
+            var w = sm.getSoundEvent(e.location());
+            sd("  played {}: track {}, known {}, volume {}, pitch {}, {} blocks away (set at {}), result {}, active {}",
+                    e.location(), inst.getSound() == null ? "?" : inst.getSound().getLocation(), w != null,
+                    String.format("%.2f", volume), String.format("%.2f", pitch), String.format("%.1f", at.distanceTo(ear)),
+                    String.format("%.1f", p.distanceTo(ear)), result, sm.isActive(inst));
+        }
     }
-
-    private static final java.util.Map<String, Integer> PLAY_NOTED = new java.util.HashMap<>();
 
     private static boolean insideCollision(ClientLevel level, Vec3 p) {
         net.minecraft.core.BlockPos bp = net.minecraft.core.BlockPos.containing(p);
