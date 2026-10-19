@@ -171,7 +171,9 @@ public final class Tracers {
 
         // true when the part moved (or was cut otherwise) since the last frame
         boolean place(ClientLevel level, RenderedMesh.PartPose now) {
-            if (now.pose().equals(placed) && java.util.Arrays.deepEquals(now.planes(), cut)) return false;
+            boolean samePose = now.pose().equals(placed), sameCut = java.util.Arrays.deepEquals(now.planes(), cut);
+            if (samePose && sameCut) return false;
+            Perf.moved(be, !samePose, !sameCut, poseDiff(now.pose(), placed), cutDiff(now.planes(), cut));
             placed = new org.joml.Matrix4f(now.pose());
             cut = now.planes() == null ? null : copy(now.planes());
             Vector3f c = placed.transformPosition(center, new Vector3f());
@@ -217,6 +219,24 @@ public final class Tracers {
             if (at.distanceToSqr(pos) > 1e-4) light = LightCoordsUtil.getLightCoords(level, BlockPos.containing(at.x + n.x * 0.05, at.y + n.y * 0.05, at.z + n.z * 0.05));
             pos = at;
             return true;
+        }
+
+        // the largest change of an element (for Perf)
+        private static float poseDiff(org.joml.Matrix4fc a, org.joml.Matrix4fc b) {
+            if (b == null) return Float.NaN;
+            float m = 0;
+            for (int c = 0; c < 4; c++) for (int r = 0; r < 4; r++) m = Math.max(m, Math.abs(a.get(c, r) - b.get(c, r)));
+            return m;
+        }
+
+        private static float cutDiff(float[][] a, float[][] b) {
+            if (a == null || b == null || a.length != b.length) return Float.NaN;
+            float m = 0;
+            for (int i = 0; i < a.length; i++) {
+                if (a[i].length != b[i].length) return Float.NaN;
+                for (int j = 0; j < a[i].length; j++) m = Math.max(m, Math.abs(a[i][j] - b[i][j]));
+            }
+            return m;
         }
 
         private static float[][] copy(float[][] a) {

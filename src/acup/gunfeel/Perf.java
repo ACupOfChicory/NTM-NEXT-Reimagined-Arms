@@ -25,6 +25,22 @@ public final class Perf {
         if (part != HOLE_DRAW && part != TRACERS && part != FOLLOW && part != CHECKS) busy = true;
     }
 
+    // holes on moving parts that moved: how many, on how many block entities, by pose or by cut, the largest change
+    private static int moved, byPose, byCut;
+    private static final java.util.Set<Object> MOVED_ON = new java.util.HashSet<>();
+    private static float poseMax, cutMax;
+    private static boolean nanSeen;
+
+    public static void moved(Object be, boolean pose, boolean cut, float poseDiff, float cutDiff) {
+        moved++;
+        MOVED_ON.add(be);
+        if (pose) byPose++;
+        if (cut) byCut++;
+        if (Float.isNaN(poseDiff) || Float.isNaN(cutDiff)) nanSeen = true;
+        if (pose && !Float.isNaN(poseDiff)) poseMax = Math.max(poseMax, poseDiff);
+        if (cut && !Float.isNaN(cutDiff)) cutMax = Math.max(cutMax, cutDiff);
+    }
+
     // once a frame: shots flying, holes kept
     public static void frame(int shots, int holes) {
         long now = System.nanoTime();
@@ -41,7 +57,13 @@ public final class Perf {
             }
             GunFeel.LOGGER.info("Bullet frame cost over {} frames ({} fps): {}total {} ms a frame; {} shots flying, {} holes",
                     frames, Math.round(frames / ((now - since) / 1e9)), b, String.format(java.util.Locale.ROOT, "%.3f", total), shots, holes);
+            if (moved > 0) GunFeel.LOGGER.info("Holes on moving parts moved {} times on {} block entities: pose {} (largest change {}), cut {} (largest {}){}", moved,
+                    MOVED_ON.size(), byPose, poseMax, byCut, cutMax, nanSeen ? ", some first placed or reshaped" : "");
         }
+        moved = byPose = byCut = 0;
+        MOVED_ON.clear();
+        poseMax = cutMax = 0;
+        nanSeen = false;
         java.util.Arrays.fill(NANOS, 0L);
         java.util.Arrays.fill(CALLS, 0);
         frames = 0;
