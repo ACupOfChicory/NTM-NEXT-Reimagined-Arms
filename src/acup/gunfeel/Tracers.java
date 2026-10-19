@@ -975,6 +975,7 @@ public final class Tracers {
         Map<Object, Group> groups = new java.util.LinkedHashMap<>();
         double cs = 1.0 / 32;
         int polyCount = 0, hiddenPieces = 0;
+        long shadeNs = 0;
         // the point the hole spreads from, a little out of the face: a piece on another block (the ground behind a
         // door, a wall behind bars) goes only where a straight line from it reaches, not round or under the thing hit
         // several points round it (a small disc on the face) make the shadow's edge soft, like a blast's own size
@@ -1041,7 +1042,9 @@ public final class Tracers {
             if (elsewhere && g.polys().size() > before) {
                 List<List<double[]>> made = new ArrayList<>(g.polys().subList(before, g.polys().size()));
                 g.polys().subList(before, g.polys().size()).clear();
+                long st = System.nanoTime();
                 for (List<double[]> pl : made) shade(near, pc, pl, blasts, lit, g.polys());
+                shadeNs += System.nanoTime() - st;
                 if (g.polys().size() == before) hiddenPieces++;
             }
             polyCount += g.polys().size() - before;
@@ -1098,7 +1101,7 @@ public final class Tracers {
                 hiddenPieces, groups.size(), polyCount);
         trimHoles();
         long took = System.nanoTime() - started;
-        if (took > 3_000_000L) GunFeel.LOGGER.info("Bullet hole on {} took {} ms: {} triangles near, {} pieces, {} polygons", level.getBlockState(pos), took / 1_000_000L, near.size(), pieces.size(), polyCount);
+        if (took > 3_000_000L) GunFeel.LOGGER.info("Bullet hole on {} took {} ms (shadow {} ms): {} triangles near, {} pieces, {} polygons", level.getBlockState(pos), took / 1_000_000L, shadeNs / 1_000_000L, near.size(), pieces.size(), polyCount);
         return true;
     }
 
@@ -1388,6 +1391,24 @@ public final class Tracers {
     // as alpha, so the shadow's edge fades
     private static void shade(List<RenderedMesh.Tri> near, Piece self, List<double[]> poly, List<Vector3d> blasts, Map<List<Long>, Double> lit,
             List<List<double[]>> out) {
+        // only what can stand between this polygon and the blast
+        double x0 = Double.MAX_VALUE, y0 = x0, z0 = x0, x1 = -x0, y1 = x1, z1 = x1;
+        for (double[] v : poly) {
+            x0 = Math.min(x0, v[2]); y0 = Math.min(y0, v[3]); z0 = Math.min(z0, v[4]);
+            x1 = Math.max(x1, v[2]); y1 = Math.max(y1, v[3]); z1 = Math.max(z1, v[4]);
+        }
+        for (Vector3d b : blasts) {
+            x0 = Math.min(x0, b.x); y0 = Math.min(y0, b.y); z0 = Math.min(z0, b.z);
+            x1 = Math.max(x1, b.x); y1 = Math.max(y1, b.y); z1 = Math.max(z1, b.z);
+        }
+        AABB span = new AABB(x0, y0, z0, x1, y1, z1).inflate(1e-3);
+        List<RenderedMesh.Tri> between = new ArrayList<>();
+        for (RenderedMesh.Tri o : near) if (o != self.tri() && o.meets(span)) between.add(o);
+        if (between.isEmpty()) {
+            out.add(poly);
+            return;
+        }
+        near = between;
         double cs = 1.0 / 16;
         double[] box = box2(poly);
         int i0 = (int) Math.floor(box[0] / cs), i1 = (int) Math.ceil(box[1] / cs), j0 = (int) Math.floor(box[2] / cs), j1 = (int) Math.ceil(box[3] / cs);
