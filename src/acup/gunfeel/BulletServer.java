@@ -25,6 +25,7 @@ import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.phys.BlockHitResult;
@@ -65,6 +66,41 @@ public final class BulletServer {
         BulletRules.Break rule = BulletRules.breakRule(state);
         if (rule == null || rule.mode() == 0) return;
         wear(level, bullet, pos, state, rule);
+    }
+
+    // the bullet's path this tick through blocks, piercing those whose rule says "pierce" while it has the damage:
+    // each one pierced takes its share of the damage (and counts towards breaking it). `paid` = blocks it already
+    // pierced (one it ended a tick inside of is not paid for again). The first block that stops it, else a miss at `to`.
+    public static BlockHitResult clip(EntityBulletBaseMK4 bullet, Level level, Vec3 from, Vec3 to, java.util.Set<BlockPos> paid) {
+        java.util.function.Consumer<BlockHitResult> through = hit -> passed(bullet, hit);
+        Vec3 at = from;
+        for (int i = 0; i < 16; i++) {
+            BlockHitResult hit = PassableClip.clip(level, at, to, through);
+            if (hit.getType() == net.minecraft.world.phys.HitResult.Type.MISS) return hit;
+            Vec3 d = to.subtract(at);
+            double len = d.length();
+            if (len < 1e-6) return hit;
+            Vec3 dir = d.scale(1.0 / len);
+            BlockPos pos = hit.getBlockPos().immutable();
+            boolean known = paid.contains(pos);
+            float left = known ? bullet.damage : PassableClip.pierced(level, hit, bullet.damage);
+            if (left < 0F) return hit;
+            BlockHitResult out = PassableClip.exit(level, hit, dir);
+            if (out == null) return hit;
+            if (!known) {
+                paid.add(pos);
+                if (level instanceof ServerLevel server) {
+                    BlockState state = level.getBlockState(pos);
+                    BulletRules.Break rule = BulletRules.breakRule(state);
+                    if (rule != null && rule.mode() != 0) wear(server, bullet, pos, state, rule);
+                }
+                bullet.damage = left;
+            }
+            // it comes out beyond this tick's end: it stays inside the block till the next tick
+            if (out.getLocation().distanceToSqr(at) >= len * len) return BlockHitResult.miss(to, hit.getDirection(), BlockPos.containing(to));
+            at = out.getLocation().add(dir.scale(1e-3));
+        }
+        return BlockHitResult.miss(to, net.minecraft.core.Direction.UP, BlockPos.containing(to));
     }
 
     // one hit on the block by its rule: true when it broke

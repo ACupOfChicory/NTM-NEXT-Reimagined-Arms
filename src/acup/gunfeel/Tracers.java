@@ -75,6 +75,8 @@ public final class Tracers {
         double end = Double.NaN; // ticks at which it hit something
         boolean whizzed; // already whizzed past the player
         volatile boolean gone; // no longer flown (its in-flight sound stops)
+        float damage; // what is left of its damage (bullet rules "pierce")
+        final java.util.Set<BlockPos> pierced = new java.util.HashSet<>(); // blocks it went through
 
         Shot(ShotPayload p, BulletConfig config, int[] colors) {
             this.config = config;
@@ -86,6 +88,7 @@ public final class Tracers {
             this.dark = colors[0];
             this.light = colors[1];
             this.lifeTicks = p.life();
+            this.damage = p.damage();
         }
 
         // where the bullet is after t ticks (as the server moves it), plus the muzzle offset fading out
@@ -434,8 +437,6 @@ public final class Tracers {
                 : s.start.add(s.v.x * s.checked, s.v.y * s.checked - 0.5 * s.g * s.checked * s.checked, s.v.z * s.checked);
         Vec3 rb = s.start.add(s.v.x * t, s.v.y * t - 0.5 * s.g * t * t, s.v.z * t);
         List<BlockHitResult> through = new ArrayList<>();
-        BlockHitResult block = PassableClip.clip(level, ra, rb, through::add);
-        double reach = block.getType() == HitResult.Type.MISS ? rb.distanceTo(ra) : block.getLocation().distanceTo(ra);
         Vec3 dir = rb.subtract(ra);
         double len = dir.length();
         double hitEntity = Double.NaN;
@@ -445,10 +446,46 @@ public final class Tracers {
                 var hit = e.getBoundingBox().inflate(0.3).clip(ra, rb);
                 if (hit.isPresent()) {
                     double d = hit.get().distanceTo(ra);
-                    if (d < reach && (Double.isNaN(hitEntity) || d < hitEntity)) hitEntity = d;
+                    if (Double.isNaN(hitEntity) || d < hitEntity) hitEntity = d;
                 }
             }
         }
+        // blocks it pierces (bullet rules "pierce", as the server has it): a hole where it goes in and where it comes out
+        Vec3 at = ra;
+        BlockHitResult block = PassableClip.clip(level, at, rb, through::add);
+        for (int i = 0; i < 16 && len > 1e-6 && block.getType() != HitResult.Type.MISS; i++) {
+            if (!Double.isNaN(hitEntity) && hitEntity < block.getLocation().distanceTo(ra)) break;
+            Vec3 unit = dir.scale(1.0 / len);
+            BlockPos pos = block.getBlockPos().immutable();
+            boolean known = s.pierced.contains(pos);
+            float left = known ? s.damage : PassableClip.pierced(level, block, s.damage);
+            if (left < 0F) break;
+            BlockHitResult out = PassableClip.exit(level, block, unit);
+            if (out == null) break;
+            if (!known) {
+                s.pierced.add(pos);
+                s.damage = left;
+                long ph = Perf.start();
+                if (Config.bulletHoles) {
+                    addHole(level, block, s.config, unit);
+                    addHole(level, out, s.config, unit.scale(-1.0));
+                }
+                Perf.add(Perf.HOLE_MAKE, ph);
+                long px = Perf.start();
+                BulletFx.blockHit(level, block, unit);
+                BulletFx.blockHit(level, out, unit.scale(-1.0));
+                Perf.add(Perf.FX, px);
+            }
+            // it comes out beyond this step's end: inside the block till the next one
+            if (out.getLocation().distanceTo(ra) >= len) {
+                block = BlockHitResult.miss(rb, block.getDirection(), BlockPos.containing(rb));
+                break;
+            }
+            at = out.getLocation().add(unit.scale(1e-3));
+            block = PassableClip.clip(level, at, rb, through::add);
+        }
+        double reach = block.getType() == HitResult.Type.MISS ? rb.distanceTo(ra) : block.getLocation().distanceTo(ra);
+        if (!Double.isNaN(hitEntity) && hitEntity >= reach) hitEntity = Double.NaN;
         Vec3 stop = rb;
         if (!Double.isNaN(hitEntity)) {
             s.end = s.checked + (t - s.checked) * hitEntity / len;

@@ -2,8 +2,9 @@
 break minecraft:pointed_dripstone,minecraft:flower_pot,minecraft:decorated_pot instant drop
 break #minecraft:leaves never through
 # wood: planks and what is made of them (not chests, barrels, shelves and other storage: they would spill)
-# break once the bullets' damage on it adds up to 15 x its hardness (planks 30, doors 45), no drops, then the bullet flies on
-break #minecraft:planks,#minecraft:wooden_slabs,#minecraft:wooden_stairs,#minecraft:wooden_fences,#minecraft:fence_gates,#minecraft:wooden_doors,#minecraft:wooden_trapdoors,#minecraft:wooden_buttons,#minecraft:wooden_pressure_plates,#minecraft:all_signs,minecraft:bamboo_mosaic,minecraft:crafting_table,minecraft:bookshelf,minecraft:ladder,minecraft:composter,minecraft:note_block,minecraft:loom,minecraft:cartography_table,minecraft:fletching_table,minecraft:smithing_table damage 15 pass
+# break once the bullets' damage on it adds up to 45 x its hardness (planks 90, doors 135), no drops, then the bullet flies on;
+# a bullet pierces it keeping 0.8 of its damage less 1.5 x hardness (planks: 20 -> 13 -> 7.4 -> 2.9, so 3 planks)
+break #minecraft:planks,#minecraft:wooden_slabs,#minecraft:wooden_stairs,#minecraft:wooden_fences,#minecraft:fence_gates,#minecraft:wooden_doors,#minecraft:wooden_trapdoors,#minecraft:wooden_buttons,#minecraft:wooden_pressure_plates,#minecraft:all_signs,minecraft:bamboo_mosaic,minecraft:crafting_table,minecraft:bookshelf,minecraft:ladder,minecraft:composter,minecraft:note_block,minecraft:loom,minecraft:cartography_table,minecraft:fletching_table,minecraft:smithing_table damage 45 pass pierce=1.5 keep=0.8
 break minecraft:melon,minecraft:pumpkin,minecraft:carved_pumpkin,minecraft:jack_o_lantern hits 4 drop
 hit * particles=block*6,minecraft:smoke*1 sound=block/0.6 range=40
 hit @metal particles=block*4,minecraft:crit*2 sound=hbm:metal_impact/0.5 range=40

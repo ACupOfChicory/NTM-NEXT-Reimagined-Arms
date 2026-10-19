@@ -93,7 +93,7 @@ public abstract class MixinBulletServer {
         Vec3 v = self.getDeltaMovement().scale(mult);
         Entity owner = self.getOwner();
         ShotPayload p = new ShotPayload(config.id, owner == null ? -1 : owner.getId(), self.getX(), self.getY(), self.getZ(),
-                (float) v.x, (float) v.y, (float) v.z, (float) (config.gravity * mult), config.expires);
+                (float) v.x, (float) v.y, (float) v.z, (float) (config.gravity * mult), config.expires, self.damage);
         PacketDistributor.sendToPlayersNear(server, null, self.getX(), self.getY(), self.getZ(), 256.0, p);
     }
 }

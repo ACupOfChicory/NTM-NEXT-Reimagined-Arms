@@ -48,8 +48,13 @@ public abstract class MixinThrowableHit {
         if (!((Object) this instanceof EntityBulletBaseMK4)) return level.clip(context);
         EntityBulletBaseMK4 bullet = (EntityBulletBaseMK4) (Object) this;
         if (level.isClientSide()) return PassableClip.clip(level, context.getFrom(), context.getTo());
-        return PassableClip.clip(level, context.getFrom(), context.getTo(), hit -> acup.gunfeel.BulletServer.passed(bullet, hit));
+        // blocks it pierced (bullet rules "pierce"), kept between ticks: one it stopped inside of is not paid twice
+        if (gunfeel$pierced == null) gunfeel$pierced = new java.util.HashSet<>();
+        return acup.gunfeel.BulletServer.clip(bullet, level, context.getFrom(), context.getTo(), gunfeel$pierced);
     }
+
+    @Unique
+    private java.util.Set<net.minecraft.core.BlockPos> gunfeel$pierced;
 
     @Unique
     private Vec3 gunfeel$start(Vec3 from) {

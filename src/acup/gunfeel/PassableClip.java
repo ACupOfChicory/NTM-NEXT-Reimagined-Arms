@@ -106,6 +106,28 @@ public final class PassableClip extends ClipContext {
         return r;
     }
 
+    // a bullet that pierces the block it hit (bullet rules "pierce"): where it comes out of the block's shape, going
+    // along `dir` (unit), as a hit on that far face from outside; null when its shape gives no way out
+    public static @org.jspecify.annotations.Nullable BlockHitResult exit(Level level, BlockHitResult in, Vec3 dir) {
+        BlockPos pos = in.getBlockPos();
+        BlockState state = level.getBlockState(pos);
+        VoxelShape shape = state.getCollisionShape(level, pos);
+        if (shape.isEmpty()) shape = state.getShape(level, pos);
+        if (shape.isEmpty()) shape = Shapes.block();
+        Vec3 far = in.getLocation().add(dir.scale(2.0));
+        BlockHitResult out = shape.clip(far, in.getLocation(), pos);
+        return out == null || out.isInside() ? null : out;
+    }
+
+    // the block a bullet hit, and its rule when the bullet pierces it with this much damage: the damage left, else -1
+    public static float pierced(Level level, BlockHitResult in, float damage) {
+        BlockState state = level.getBlockState(in.getBlockPos());
+        if (state.isAir()) return -1F;
+        BulletRules.Break rule = BulletRules.breakRule(state);
+        if (rule == null) return -1F;
+        return rule.pierced(damage, state.getDestroySpeed(level, in.getBlockPos()));
+    }
+
     private static String side(Level level) {
         return level.isClientSide() ? "client" : "server";
     }

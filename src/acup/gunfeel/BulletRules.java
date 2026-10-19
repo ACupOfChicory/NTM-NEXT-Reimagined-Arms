@@ -35,7 +35,14 @@ public final class BulletRules {
     public static final String FILE = "ntm-gunfeel-bullets.txt";
 
     // break: how a block gives way. mode: 0 never, 1 instant, 2 after `amount` hits, 3 after `amount` x hardness damage
-    public record Break(int mode, float amount, boolean drop, boolean pass, boolean through, @Nullable String replace) {
+    // pierce: a bullet goes through it, keeping `keep` of its damage less `pierce` x hardness (0 = never pierced)
+    public record Break(int mode, float amount, boolean drop, boolean pass, boolean through, @Nullable String replace, float pierce, float keep) {
+        // the bullet's damage after piercing a block of this hardness, or -1 when it stops in it
+        public float pierced(float damage, float hardness) {
+            if (pierce <= 0F || through || hardness < 0F) return -1F;
+            float left = damage * keep - pierce * hardness;
+            return left >= 1F ? left : -1F;
+        }
     }
 
     // a particle: "block" (the hit block's crack), "block:<id>" (that block's crack) or a plain particle id
@@ -231,10 +238,21 @@ public final class BulletRules {
                 if (s.equals("pass")) pass = true;
                 if (s.equals("through")) through = true;
             }
-            out = mode == 0 && !through ? null : new Break(mode, amount, drop, pass || through, through, r.opts().get("replace"));
+            boolean pierce = number(r.opts().get("pierce"), 0F) > 0F;
+            out = mode == 0 && !through && !pierce ? null : new Break(mode, amount, drop, pass || through, through, r.opts().get("replace"),
+                    number(r.opts().get("pierce"), 0F), number(r.opts().get("keep"), 1F));
         }
         BREAKS.put(state, java.util.Optional.ofNullable(out));
         return out;
+    }
+
+    private static float number(@Nullable String text, float or) {
+        if (text == null) return or;
+        try {
+            return Float.parseFloat(text);
+        } catch (NumberFormatException e) {
+            return or;
+        }
     }
 
     // bullets always fly through it (a "break ... through" rule); it still counts the hits and breaks by its rule
@@ -334,12 +352,14 @@ public final class BulletRules {
             # sound type (@metal, @wood, @glass, @stone, @grass ...), * = any; several with commas, no spaces.
             # For entity/kill lines: an entity id, #tag, ~pattern or *.
             #
-            # break <blocks> never | instant | hits <n> | damage <x> [drop] [pass] [replace=<block state>]
+            # break <blocks> never | instant | hits <n> | damage <x> [drop] [pass] [replace=<block state>] [pierce=<x> [keep=<k>]]
             #   damage <x>: breaks once the bullets' damage on it adds up to x times its hardness; hits and damage
             #   show the cracks and are forgotten 20 s after the last hit. drop = drops itself; pass = the bullet
             #   flies on through the broken block; through = bullets always fly through it (no hole, no stop), it still
             #   counts the hits and breaks by its rule ("never through": flown through, never broken). A player's bullet breaks only where that player could break
-            #   blocks (claims, spawn protection).
+            #   blocks (claims, spawn protection). pierce=<x>: a bullet goes through the block (a hole where it goes in and
+            #   where it comes out) keeping k (default 1) of its damage less x times the block's hardness; one left with
+            #   less than 1 damage stops in it. Its damage still counts towards breaking the block.
             # hit <blocks> [particles=<p>*<n>,...] [sound=<id>[/volume[/pitch]]] [range=<blocks>]   (each player's own game)
             #   particle: block (the hit block's crumbs), block:<id> (that block's crumbs), a particle id
             #   (minecraft:smoke); sound: block (the hit block's own hit sound), a sound id; none = nothing;
