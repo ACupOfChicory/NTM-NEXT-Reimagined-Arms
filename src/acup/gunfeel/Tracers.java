@@ -1061,6 +1061,7 @@ public final class Tracers {
             polyCount += g.polys().size() - before;
         }
         long st5 = System.nanoTime();
+        List<double[]> faces = null;
         Vec3 hitAt = new Vec3(world.x, world.y, world.z);
         for (Group g : groups.values()) {
             if (g.polys().isEmpty()) continue;
@@ -1100,7 +1101,8 @@ public final class Tracers {
             int light = LightCoordsUtil.getLightCoords(level, BlockPos.containing(at.x + g.tn().x * 0.05, at.y + g.tn().y * 0.05, at.z + g.tn().z * 0.05));
             // seen only from in front, like the face, unless the face is a thin sheet drawn from both sides (bars) or
             // glass: through glass its far side's holes show
-            boolean front = first.oneSided() && !backed(near, g) && !(first.block() != null && glassLike(state));
+            if (faces == null && first.oneSided()) faces = oneSidedFaces(near);
+            boolean front = first.oneSided() && !backed(faces, g) && !(first.block() != null && glassLike(state));
             // on glass (a glass block, a door's clear window): drawn after the glass behind it, see HoleRender
             boolean late = first.tex().glass() || first.block() != null && (translucent(state) || glassLike(state));
             Follow follow = first.anchor() == null ? null : new Follow(first.anchor(), at, mesh, light);
@@ -1464,14 +1466,24 @@ public final class Tracers {
     }
 
     // another face lies back to back with the group's (a thin sheet: bars, a pane): the hole is seen from both sides
-    private static boolean backed(List<RenderedMesh.Tri> near, Group g) {
+    private static boolean backed(List<double[]> faces, Group g) {
+        for (double[] f : faces) {
+            if (new Vector3d(f[0], f[1], f[2]).dot(g.tn()) > -0.999) continue;
+            if (Math.abs(f[3] - g.plane()) < 2e-3) return true;
+        }
+        return false;
+    }
+
+    // the one-sided faces near: their normal and -normal . corner, for backed()
+    private static List<double[]> oneSidedFaces(List<RenderedMesh.Tri> near) {
+        List<double[]> out = new ArrayList<>();
         for (RenderedMesh.Tri o : near) {
             if (!o.oneSided()) continue;
             Vector3d on = o.normal();
-            if (on == null || on.dot(g.tn()) > -0.999) continue;
-            if (Math.abs(-on.dot(o.corner(0)) - g.plane()) < 2e-3) return true;
+            if (on == null) continue;
+            out.add(new double[] {on.x, on.y, on.z, -on.dot(o.corner(0))});
         }
-        return false;
+        return out;
     }
 
     // a cell is shown where the piece shows a pixel under its centre (or under a point of it on the piece); a cell
@@ -1643,8 +1655,21 @@ public final class Tracers {
     }
 
     // a block drawn with the translucent terrain (glass): its holes are drawn after it
+    private static final Map<BlockState, Boolean> TRANSLUCENT = new java.util.IdentityHashMap<>();
+    private static Object translucentOf;
+
     private static boolean translucent(BlockState state) {
         if (state.getRenderShape() != net.minecraft.world.level.block.RenderShape.MODEL) return false;
+        // kept per state until the models are loaded anew
+        Object models = Minecraft.getInstance().getModelManager().getBlockStateModelSet();
+        if (models != translucentOf) {
+            TRANSLUCENT.clear();
+            translucentOf = models;
+        }
+        return TRANSLUCENT.computeIfAbsent(state, Tracers::translucentModel);
+    }
+
+    private static boolean translucentModel(BlockState state) {
         var model = Minecraft.getInstance().getModelManager().getBlockStateModelSet().get(state);
         List<net.minecraft.client.renderer.block.dispatch.BlockStateModelPart> parts = new ArrayList<>();
         model.collectParts(net.minecraft.util.RandomSource.create(42L), parts);
