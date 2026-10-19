@@ -1225,6 +1225,45 @@ public final class Arms {
     private static final int[] switchLastCrop = new int[2], switchFromCrop = new int[2];
     private static final long[] switchAt = new long[2];
 
+    // /gunfeel armdebug: where the drawn arm lands on the screen, projected the way the hands are drawn
+    // (70 deg hud fov as NTM adjusts it, the window's aspect). hand / cut = middle of the hand end / of the
+    // cut (shoulder) end, screen fractions from the top left corner, "out" = outside the window or behind
+    // the eye; vis = share of points over the arm's surface inside the window. Not hidden by the gun.
+    private static String onScreen(Matrix4f m, int crop, boolean right, boolean slim) {
+        var mc = Minecraft.getInstance();
+        float fov = com.hbm.render.item.weapon.sedna.ItemRenderWeaponBase.adjustHudFov(70F);
+        float aspect = (float) mc.getWindow().getWidth() / Math.max(1, mc.getWindow().getHeight());
+        Matrix4f clip = new Matrix4f().perspective((float) Math.toRadians(fov), aspect, 0.05F, 100F)
+                .mul(new Matrix4f(com.mojang.blaze3d.systems.RenderSystem.getModelViewStack())).mul(m);
+        float cx = (right ? -1F : 1F) * (slim ? 5.5F : 6F) / 16F, half = (slim ? 1.5F : 2F) / 16F;
+        float top = 12F / 16F, cut = (12F - crop) / 16F;
+        int in = 0, all = 0;
+        for (int k = 0; k <= 8; k++) {
+            float y = cut + (top - cut) * k / 8F;
+            for (int a = -1; a <= 1; a++) for (int b = -1; b <= 1; b++) {
+                if (a == 0 && b == 0) continue;
+                all++;
+                if (screenPoint(clip, cx + a * half, y, b * 2F / 16F) != null) in++;
+            }
+        }
+        return "screen hand=" + screenText(clip, cx, top) + " cut=" + screenText(clip, cx, cut) + " vis=" + Math.round(100F * in / all) + "%";
+    }
+
+    private static float[] screenPoint(Matrix4f clip, float x, float y, float z) {
+        org.joml.Vector4f v = clip.transform(new org.joml.Vector4f(x, y, z, 1F));
+        if (v.w <= 1e-4F) return null;
+        float sx = (v.x / v.w + 1F) * 0.5F, sy = (1F - v.y / v.w) * 0.5F;
+        return sx < 0F || sx > 1F || sy < 0F || sy > 1F ? null : new float[] {sx, sy};
+    }
+
+    private static String screenText(Matrix4f clip, float x, float y) {
+        org.joml.Vector4f v = clip.transform(new org.joml.Vector4f(x, y, 0F, 1F));
+        if (v.w <= 1e-4F) return "behind";
+        float sx = (v.x / v.w + 1F) * 0.5F, sy = (1F - v.y / v.w) * 0.5F;
+        boolean out = sx < 0F || sx > 1F || sy < 0F || sy > 1F;
+        return String.format(java.util.Locale.ROOT, "(%.2f %.2f)%s", sx, sy, out ? "out" : "");
+    }
+
     // pixels of arm shown by the last blendAtHand
     private static int blendCrop = 12;
 
@@ -1358,9 +1397,9 @@ public final class Arms {
             GunAnimation type = HbmAnimations.getGunAnimation(0);
             Vector3f origin = m.transformPosition(new Vector3f());
             Vector3f along = m.transformDirection(new Vector3f(0F, 1F, 0F));
-            GunFeel.LOGGER.info("[armdebug] {} {} t={} {} | {} | origin={} up={} crop={}", right ? "R" : "L",
+            GunFeel.LOGGER.info("[armdebug] {} {} t={} {} | {} | origin={} up={} crop={} | {}", right ? "R" : "L",
                     HbmAnimations.getRelevantAnim(0) == null ? "-" : type, fmt(animMillis()), branch, right ? "" : branchNote,
-                    fmt(origin), fmt(along), shown);
+                    fmt(origin), fmt(along), shown, onScreen(m, shown, right, slim));
             branchNote = "";
         }
         PoseStack pose = new PoseStack();
