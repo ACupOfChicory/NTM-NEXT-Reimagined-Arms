@@ -75,6 +75,7 @@ public final class BulletRules {
     private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger("ntm-gunfeel");
     private static final Map<BlockState, java.util.Optional<Break>> BREAKS = new java.util.IdentityHashMap<>();
     private static final Map<BlockState, Effect> HITS = new java.util.IdentityHashMap<>();
+    private static final Map<BlockState, Boolean> RICOCHETS = new java.util.IdentityHashMap<>();
 
     private static synchronized List<Rule> rules() {
         long now = System.currentTimeMillis();
@@ -101,6 +102,7 @@ public final class BulletRules {
                     rules = all;
                     BREAKS.clear();
                     HITS.clear();
+                    RICOCHETS.clear();
                 }
             } catch (Exception e) {
                 if (rules.isEmpty()) rules = builtin;
@@ -293,6 +295,15 @@ public final class BulletRules {
         return anyThrough;
     }
 
+    // a bullet may bounce off it (NTM's ricochet at a grazing angle); "ricochet <blocks> no": it stops in it instead
+    public static synchronized boolean ricochet(BlockState state) {
+        rules();
+        return RICOCHETS.computeIfAbsent(state, st -> {
+            Rule r = last("ricochet", x -> blockMatches(x.selectors(), st));
+            return r == null || !java.util.Arrays.asList(r.words()).contains("no");
+        });
+    }
+
     public static synchronized Effect hit(BlockState state) {
         rules();
         Effect got = HITS.get(state);
@@ -382,6 +393,8 @@ public final class BulletRules {
             #   particle: block (the hit block's crumbs), block:<id> (that block's crumbs), a particle id
             #   (minecraft:smoke); sound: block (the hit block's own hit sound), a sound id; none = nothing;
             #   range: heard over that many blocks, fading out to it (Minecraft's own: 16)
+            # ricochet <blocks> yes | no   no: a bullet meeting it at a grazing angle stops in it instead of bouncing off
+            #   (NTM's ricochet); yes (the default) bounces
             # entity <who> [particles=...] [sound=...] [to=all]   a bullet hits a creature (sound heard by the shooter,
             #   to=all: by everyone near)
             # kill <who> [particles=...] [sound=...] [to=all]     a bullet kills it

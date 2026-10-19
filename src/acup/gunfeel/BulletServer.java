@@ -68,6 +68,8 @@ public final class BulletServer {
 
     // NTM's ricochet sound (MixinRicochetSound): off a block whose hit sound is steel (bullet rules; a multiblock's
     // cell by its machine) our steel ricochet where the bullet hit instead, and true; else false (NTM's own plays)
+    public static volatile boolean debugRicochet; // /gunfeel sounddebug in a single player world: its ricochets to the log
+
     public static boolean ricochetSound(Level level, net.minecraft.world.phys.HitResult mop) {
         if (!(mop instanceof BlockHitResult hit) || level.isClientSide()) return false;
         BlockState state = level.getBlockState(hit.getBlockPos());
@@ -82,7 +84,11 @@ public final class BulletServer {
             }
         }
         BulletRules.Sound s = BulletRules.hit(rule).sound();
-        if (s == null || !s.id().startsWith("ntmgunfeel:bullet.hit.steel")) return false;
+        boolean steel = s != null && s.id().startsWith("ntmgunfeel:bullet.hit.steel");
+        if (debugRicochet) acup.gunfeel.GunFeel.LOGGER.info("[sounddebug] server: ricochet off {} at {} (hit sound {}): {}",
+                BuiltInRegistries.BLOCK.getKey(rule.getBlock()), hit.getBlockPos().toShortString(), s == null ? "none" : s.id(),
+                steel ? "our steel ricochet" : "NTM's ricochet sound");
+        if (!steel) return false;
         Vec3 at = hit.getLocation();
         level.playSound(null, at.x, at.y, at.z, RICOCHET_STEEL, net.minecraft.sounds.SoundSource.PLAYERS, 1.0F, 0.9F + level.getRandom().nextFloat() * 0.2F);
         return true;

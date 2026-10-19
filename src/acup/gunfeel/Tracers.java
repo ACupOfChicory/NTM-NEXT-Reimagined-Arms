@@ -47,14 +47,13 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 // own shots), and a bullet hole where it hits a block. NTM's own wide ribbon is then not drawn for those bullets.
 public final class Tracers {
     // eight hole shapes, then the scorch mark left by bullets that do something on impact (explosive, incendiary)
-    // SCRATCH, SCRATCH + 1: a ricochet's scratch, straight along the texture's u / diagonal (u and v)
-    private static final int HOLE_KINDS = 8, SCORCH = HOLE_KINDS, SCRATCH = SCORCH + 1, KINDS = SCRATCH + 2;
+    // SCRATCH: a ricochet's scratch, along the texture's u, laid at any angle (turn = SCRATCH_TURN + degrees)
+    private static final int HOLE_KINDS = 8, SCORCH = HOLE_KINDS, SCRATCH = SCORCH + 1, KINDS = SCRATCH + 1, SCRATCH_TURN = 1000;
     private static final Identifier[] TEXTURES = new Identifier[KINDS];
     static {
         for (int i = 0; i < HOLE_KINDS; i++) TEXTURES[i] = Identifier.fromNamespaceAndPath("ntmgunfeel", "textures/effect/bullet_hole_" + i + ".png");
         TEXTURES[SCORCH] = Identifier.fromNamespaceAndPath("ntmgunfeel", "textures/effect/scorch.png");
-        TEXTURES[SCRATCH] = Identifier.fromNamespaceAndPath("ntmgunfeel", "textures/effect/scratch_0.png");
-        TEXTURES[SCRATCH + 1] = Identifier.fromNamespaceAndPath("ntmgunfeel", "textures/effect/scratch_1.png");
+        TEXTURES[SCRATCH] = Identifier.fromNamespaceAndPath("ntmgunfeel", "textures/effect/scratch.png");
     }
     // the tracer joins the bullet's real path over this many blocks from the muzzle
     private static final float JOIN = 4F;
@@ -526,6 +525,8 @@ public final class Tracers {
             if (len > 1e-6 && ricochet(s, level, block, vel)) {
                 // NTM's standard ricochet: a scratch, no hit effects (the server plays the ricochet's sound; on steel
                 // ours, BulletFx.ricochetSound); the bullet flies on mirrored on the face's axis unless that was its last
+                BulletFx.sd("ricochet off {} at {} (bounce {} of {})", net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(level.getBlockState(block.getBlockPos()).getBlock()),
+                        block.getBlockPos().toShortString(), s.ricochets + 1, s.config.maxRicochetCount);
                 long ph = Perf.start();
                 if (Config.bulletHoles) {
                     scratch = vel.normalize();
@@ -567,7 +568,7 @@ public final class Tracers {
         if (c.onImpact != null || c.onRicochet != BulletConfig.LAMBDA_STANDARD_RICOCHET) return false;
         BlockState state = level.getBlockState(hit.getBlockPos());
         if (state.isAir() || state.instrument() == net.minecraft.world.level.block.state.properties.NoteBlockInstrument.HAT
-                || state.is(net.minecraft.world.level.block.Blocks.GLOWSTONE)) return false;
+                || state.is(net.minecraft.world.level.block.Blocks.GLOWSTONE) || !BulletRules.ricochet(state)) return false;
         Direction f = hit.getDirection();
         double l = vel.length();
         if (l < 1e-9) return false;
@@ -579,26 +580,29 @@ public final class Tracers {
     // set while a ricochet's scratch is made (the bullet's direction): the hole paths lay a scratch along it instead
     private static Vec3 scratch;
 
-    // the scratch texture (straight or diagonal) and turn whose forward (texture u, or u and v) lies closest to the
-    // bullet's way; ea, eb = the world directions the texture's a, b grow along before the turn
-    private static int[] scratchPick(Vector3d ea, Vector3d eb) {
+    // a scratch's turn: the angle that lays its texture's forward (u) along the bullet's way; ea, eb = the world
+    // directions the texture's a, b grow along
+    private static int scratchTurn(Vector3d ea, Vector3d eb) {
         Vector3d d = new Vector3d(scratch.x, scratch.y, scratch.z);
-        int[] best = {SCRATCH, 0};
-        double most = -2;
-        for (int turn = 0; turn < 8; turn++) {
-            Vector3d a = new Vector3d(ea).mul((turn & 4) != 0 ? -1 : 1);
-            Vector3d u, v;
-            switch (turn & 3) {
-                case 1 -> { u = new Vector3d(eb); v = new Vector3d(a).negate(); }
-                case 2 -> { u = new Vector3d(a).negate(); v = new Vector3d(eb).negate(); }
-                case 3 -> { u = new Vector3d(eb).negate(); v = new Vector3d(a); }
-                default -> { u = new Vector3d(a); v = new Vector3d(eb); }
-            }
-            double straight = u.dot(d), diagonal = new Vector3d(u).add(v).normalize().dot(d);
-            if (straight > most) { most = straight; best = new int[] {SCRATCH, turn}; }
-            if (diagonal > most) { most = diagonal; best = new int[] {SCRATCH + 1, turn}; }
+        int deg = (int) Math.round(Math.toDegrees(Math.atan2(d.dot(eb), d.dot(ea))));
+        return SCRATCH_TURN + Math.floorMod(deg, 360);
+    }
+
+    // where (a, b) on a hole's square (0..1 each) falls on its texture: turned / mirrored by `turn` (0..7), or a
+    // scratch's turned by its angle and shrunk by 1/sqrt 2 about the centre, so the square's corners stay on it
+    private static float[] holeUv(int turn, float a, float b) {
+        if (turn >= SCRATCH_TURN) {
+            double r = Math.toRadians(turn - SCRATCH_TURN), c = Math.cos(r), sn = Math.sin(r);
+            double da = (a - 0.5) * 0.7071, db = (b - 0.5) * 0.7071;
+            return new float[] {(float) (0.5 + da * c + db * sn), (float) (0.5 - da * sn + db * c)};
         }
-        return best;
+        if ((turn & 4) != 0) a = 1F - a;
+        return switch (turn & 3) {
+            case 1 -> new float[] {b, 1F - a};
+            case 2 -> new float[] {1F - a, 1F - b};
+            case 3 -> new float[] {1F - b, a};
+            default -> new float[] {a, b};
+        };
     }
 
     private static float scratchSize() {
@@ -651,9 +655,8 @@ public final class Tracers {
             double[] ea = new double[3], eb = new double[3];
             ea[ax[0]] = 1;
             eb[ax[1]] = 1;
-            int[] k = scratchPick(new Vector3d(ea[0], ea[1], ea[2]), new Vector3d(eb[0], eb[1], eb[2]));
-            kind = k[0];
-            turn = k[1];
+            kind = SCRATCH;
+            turn = scratchTurn(new Vector3d(ea[0], ea[1], ea[2]), new Vector3d(eb[0], eb[1], eb[2]));
             size = scratchSize();
         }
         double[] rect = faceRect(level, hit.getBlockPos(), hit.getDirection());
@@ -720,9 +723,8 @@ public final class Tracers {
         Vector3d ref = Math.abs(normal.y) < 0.9 ? new Vector3d(0, 1, 0) : new Vector3d(1, 0, 0);
         Vector3d t1 = new Vector3d(normal).cross(ref).normalize(), t2 = new Vector3d(normal).cross(t1).normalize();
         if (scratch != null) {
-            int[] k = scratchPick(t1, t2);
-            kind = k[0];
-            turn = k[1];
+            kind = SCRATCH;
+            turn = scratchTurn(t1, t2);
         }
         // the faces in the same plane, here and around
         List<double[]> polys = new ArrayList<>();
@@ -942,9 +944,8 @@ public final class Tracers {
         Vector3d ref = Math.abs(normal.y) < 0.9 ? new Vector3d(0, 1, 0) : new Vector3d(1, 0, 0);
         Vector3d t1 = new Vector3d(normal).cross(ref).normalize(), t2 = new Vector3d(normal).cross(t1).normalize();
         if (scratch != null) {
-            int[] k = scratchPick(t1, t2);
-            kind = k[0];
-            turn = k[1];
+            kind = SCRATCH;
+            turn = scratchTurn(t1, t2);
         }
         Vector3d[] frame = {world, t1, t2, normal};
         // as deep as a step, a bevel or a bar standing out of the face goes (the secure door's ribs)
@@ -1047,15 +1048,8 @@ public final class Tracers {
             for (List<double[]> pl : g.polys()) {
                 mesh[k++] = pl.size();
                 for (double[] v : pl) {
-                    float a = (float) ((v[0] + half) / (2 * half)), b = (float) ((v[1] + half) / (2 * half));
-                    if ((turn & 4) != 0) a = 1F - a;
-                    float tu = a, tv = b;
-                    switch (turn & 3) {
-                        case 1 -> { tu = b; tv = 1F - a; }
-                        case 2 -> { tu = 1F - a; tv = 1F - b; }
-                        case 3 -> { tu = 1F - b; tv = a; }
-                        default -> { }
-                    }
+                    float[] uv = holeUv(turn, (float) ((v[0] + half) / (2 * half)), (float) ((v[1] + half) / (2 * half)));
+                    float tu = uv[0], tv = uv[1];
                     mesh[k++] = (float) (v[2] - at.x);
                     mesh[k++] = (float) (v[3] - at.y);
                     mesh[k++] = (float) (v[4] - at.z);
@@ -1230,6 +1224,8 @@ public final class Tracers {
         }
         // faces turned away from the shooter (more than 90 degrees) are not under the hole
         if (f < -1e-3) return null;
+        // a scratch stays on its face: not over an edge, a bevel or a step
+        if (scratch != null && f < 0.985) return null;
         // the triangle in the slab as deep as the hole is wide around the hit point
         List<double[]> poly = new ArrayList<>(3);
         for (int i = 0; i < 3; i++) {
@@ -1467,15 +1463,8 @@ public final class Tracers {
         int k = 0;
         for (Vector3d p : poly) {
             Vector3d r = new Vector3d(p).sub(at);
-            float a = (float) ((r.dot(t1) + half) / (2 * half)), b = (float) ((r.dot(t2) + half) / (2 * half));
-            if ((turn & 4) != 0) a = 1F - a;
-            float tu = a, tv = b;
-            switch (turn & 3) {
-                case 1 -> { tu = b; tv = 1F - a; }
-                case 2 -> { tu = 1F - a; tv = 1F - b; }
-                case 3 -> { tu = 1F - b; tv = a; }
-                default -> { }
-            }
+            float[] uv = holeUv(turn, (float) ((r.dot(t1) + half) / (2 * half)), (float) ((r.dot(t2) + half) / (2 * half)));
+            float tu = uv[0], tv = uv[1];
             out[k++] = r.x;
             out[k++] = r.y;
             out[k++] = r.z;
@@ -1978,15 +1967,8 @@ public final class Tracers {
             for (int j = 0; j < 4; j++) {
                 double[] c = corners[flip != reverse ? 3 - j : j];
                 // where this corner falls on the hole's texture, 0..1, then turned / mirrored
-                float a = (float) ((c[0] - (pu - size)) / (2 * size)), b = (float) ((c[1] - (pv - size)) / (2 * size));
-                if ((h.turn() & 4) != 0) a = 1F - a;
-                float tu = a, tv = b;
-                switch (h.turn() & 3) {
-                    case 1 -> { tu = b; tv = 1F - a; }
-                    case 2 -> { tu = 1F - a; tv = 1F - b; }
-                    case 3 -> { tu = 1F - b; tv = a; }
-                    default -> { }
-                }
+                float[] uv = holeUv(h.turn(), (float) ((c[0] - (pu - size)) / (2 * size)), (float) ((c[1] - (pv - size)) / (2 * size)));
+                float tu = uv[0], tv = uv[1];
                 double[] w = new double[3];
                 w[ax[0]] = c[0];
                 w[ax[1]] = c[1];

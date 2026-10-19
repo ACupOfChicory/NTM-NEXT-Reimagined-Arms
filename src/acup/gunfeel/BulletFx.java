@@ -56,7 +56,7 @@ public final class BulletFx {
     // /gunfeel sounddebug: every hit's sound, what was picked and why it played or not, to the log ("[sounddebug]")
     public static volatile boolean debugSound;
 
-    private static void sd(String fmt, Object... args) {
+    static void sd(String fmt, Object... args) {
         if (debugSound) GunFeel.LOGGER.info("[sounddebug] " + fmt, args);
     }
 

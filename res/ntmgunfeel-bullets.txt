@@ -20,4 +20,6 @@ hit ~hbm:.*steel.*,hbm:platemetal,~hbm:.*tungsten.*,~hbm:.*titanium.*,~hbm:machi
 # brick-built machines (foundry, combination oven, crucible, blast and brick furnaces, chimneys, electrolyser, cooling towers): concrete, the nearest sound
 hit hbm:foundry_basin,hbm:foundry_channel,hbm:foundry_mold,hbm:foundry_outlet,hbm:foundry_slagtap,hbm:foundry_tank,hbm:furnace_combination,hbm:machine_crucible,hbm:machine_blast_furnace,hbm:machine_furnace_brick,hbm:chimney_brick,hbm:chimney_industrial,hbm:machine_electrolyser,hbm:machine_tower_small,hbm:machine_tower_large particles=block*6,minecraft:smoke*1 sound=ntmgunfeel:bullet.hit.concrete/0.8 range=40
 hit hbm:radio_telex particles=block*6,minecraft:smoke*1 sound=ntmgunfeel:bullet.hit.wood/0.8 range=40
+# soft ground: a grazing bullet digs in, no ricochet
+ricochet @gravel,@grass,@rooted_dirt,@mud,@sand,@soul_sand,@soul_soil,@moss,@moss_carpet,@packed_mud,@snow,@powder_snow,minecraft:gravel,minecraft:suspicious_gravel,~minecraft:.*_concrete_powder,minecraft:clay,minecraft:farmland,minecraft:dirt_path,minecraft:coarse_dirt,minecraft:podzol,minecraft:mycelium,~hbm:.*sand.*,~hbm:.*dirt.*,~hbm:.*gravel.* no
 whizz sound=ntmgunfeel:bullet.whizz/0.9 radius=3 crack=ntmgunfeel:bullet.crack/0.7 crackradius=1.2

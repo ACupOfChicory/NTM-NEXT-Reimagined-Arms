@@ -65,6 +65,27 @@ public abstract class MixinBulletServer {
         ci.cancel();
     }
 
+    // bullet rules "ricochet <blocks> no" (soft ground): where NTM's standard ricochet would bounce the bullet off,
+    // it stops in the block instead
+    @Inject(method = "onImpact", at = @At("HEAD"), cancellable = true)
+    private void gunfeel$noRicochet(net.minecraft.world.phys.HitResult mop, CallbackInfo ci) {
+        EntityBulletBaseMK4 self = (EntityBulletBaseMK4) (Object) this;
+        if (config == null || config.onImpact != null || config.onRicochet != BulletConfig.LAMBDA_STANDARD_RICOCHET || self.level().isClientSide()
+                || !(mop instanceof net.minecraft.world.phys.BlockHitResult hit) || hit.getType() != net.minecraft.world.phys.HitResult.Type.BLOCK) return;
+        net.minecraft.world.level.block.state.BlockState state = self.level().getBlockState(hit.getBlockPos());
+        if (state.isAir() || acup.gunfeel.BulletRules.ricochet(state)) return;
+        net.minecraft.core.Direction f = hit.getDirection();
+        Vec3 vel = self.getDeltaMovement();
+        double l = vel.length();
+        if (l < 1e-9) return;
+        double cos = (f.getStepX() * vel.x + f.getStepY() * vel.y + f.getStepZ() * vel.z) / l;
+        if (Math.abs(Math.toDegrees(Math.acos(Math.clamp(cos, -1.0, 1.0))) - 90.0) > config.ricochetAngle) return;
+        Vec3 at = hit.getLocation();
+        self.setPos(at.x, at.y, at.z);
+        self.discard();
+        ci.cancel();
+    }
+
     @Unique
     private boolean gunfeel$targetAlive;
 

@@ -75,6 +75,7 @@ public final class GripCommand {
                 })))
                 .then(Commands.literal("sounddebug").executes(c -> {
                     BulletFx.debugSound = !BulletFx.debugSound;
+                    BulletServer.debugRicochet = BulletFx.debugSound; // the built-in server of a single player world
                     boolean on = BulletFx.debugSound;
                     c.getSource().sendSuccess(() -> Component.literal(on ? "Отладка звуков включена: каждое попадание пишется в лог ([sounddebug])" : "Отладка звуков выключена"), false);
                     return 1;
