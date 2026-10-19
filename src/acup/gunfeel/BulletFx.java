@@ -144,8 +144,19 @@ public final class BulletFx {
             if (d >= range) return;
             p = ear.add(at.subtract(ear).scale(16.0 / range));
         }
-        level.playLocalSound(p.x, p.y, p.z, e, SoundSource.PLAYERS, volume, pitch, false);
+        var inst = new net.minecraft.client.resources.sounds.SimpleSoundInstance(e, SoundSource.PLAYERS, volume, pitch,
+                RandomSource.create(level.getRandom().nextLong()), p.x, p.y, p.z);
+        var sm = Minecraft.getInstance().getSoundManager();
+        var result = sm.play(inst);
+        // diagnostics for "no hit sounds": the first plays of each event, what the sound engine made of them
+        if (PLAY_NOTED.merge(e.location().toString(), 1, Integer::sum) <= 3)
+            GunFeel.LOGGER.info("Bullet sound {}: known {}, volume {}, pitch {}, {} blocks away (set at {}), result {}, active {}",
+                    e.location(), sm.getSoundEvent(e.location()) != null, String.format("%.2f", volume), String.format("%.2f", pitch),
+                    String.format("%.1f", at.distanceTo(Minecraft.getInstance().gameRenderer.mainCamera().position())),
+                    String.format("%.1f", p.distanceTo(Minecraft.getInstance().gameRenderer.mainCamera().position())), result, sm.isActive(inst));
     }
+
+    private static final java.util.Map<String, Integer> PLAY_NOTED = new java.util.HashMap<>();
 
     private static boolean insideCollision(ClientLevel level, Vec3 p) {
         net.minecraft.core.BlockPos bp = net.minecraft.core.BlockPos.containing(p);
