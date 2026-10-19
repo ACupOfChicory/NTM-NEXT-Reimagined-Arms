@@ -39,7 +39,7 @@ public final class Config {
     public static boolean hideOffhand = true;
     public static boolean cornerHud = true;
     public static String ammoMenu = "steel";
-    public static int ammoMenuColor = 0xFFB63E;
+    public static int ammoMenuColor = 0xFF8C1A;
     // Both-hands grip. Each arm runs from its hand back along a fixed direction (camera frame: +X left,
     // +Y up, +Z forward) until it reaches the depth armReach*; the directions follow how a modern
     // shooter's arms come into view (right arm back past the cheek, left arm up from below).
@@ -327,7 +327,7 @@ public final class Config {
         try {
             ammoMenuColor = Integer.parseInt(p.getProperty("ammoMenuColor", String.format("%06x", ammoMenuColor)).trim().replace("#", ""), 16) & 0xFFFFFF;
         } catch (NumberFormatException e) {
-            ammoMenuColor = 0xFFB63E;
+            ammoMenuColor = 0xFF8C1A;
         }
         arms = bool(p, "arms", arms);
         armScale = num(p, "armScale", armScale);

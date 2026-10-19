@@ -238,6 +238,14 @@ public final class RadialMenu {
         }
     }
 
+    // the type now in the gun: a soft disc of the accent colour under its icon
+    private static void glow(Frame f, GuiShapes sh, float x, float y, float r) {
+        float keep = sh.feather;
+        sh.feather = 3;
+        sh.disc(x, y, r, c(f.acc, .62F * f.in[f.cur], f), c(f.acc, 0, f));
+        sh.feather = keep;
+    }
+
     private static int c(int rgb, float alpha, Frame f) {
         return GuiShapes.argb(rgb, alpha * f.open);
     }
@@ -260,20 +268,16 @@ public final class RadialMenu {
                 sh.sector(ox, oy, R_OUT - 2.5F, R_OUT, a - step / 2, a + step / 2, c(f.acc, hv, f), c(f.acc, hv, f));
             }
             if (n > 1) for (int i = 0; i < n; i++) sh.radial(f.ang(i) + step / 2, R_IN + 4, R_OUT - 4, 1, c(WHITE, .13F, f));
+            if (f.cur >= 0) {
+                float a = f.ang(f.cur), hv = h[f.cur], r = 42 + 5 * hv;
+                glow(f, sh, sx(r, a) + sx(5 * hv, a), sy(r, a) + sy(5 * hv, a) - 1, 15 + 2 * hv);
+            }
             sh.ring(0, 0, R_OUT - 1, R_OUT - .2F, c(WHITE, .10F, f), c(WHITE, .10F, f));
             sh.ring(0, 0, R_IN + .2F, R_IN + 1, c(WHITE, .10F, f), c(WHITE, .10F, f));
             return;
         }
         for (int i = 0; i < n; i++) {
-            float[] p = entry(f, i, 42 + 5 * h[i], .25F, i == f.cur ? f.acc : 0xEBEBEB, "", 1);
-            if (i == f.cur) { // the loaded type: two corners above it
-                int col = c(f.acc, f.in[i], f);
-                float x = p[0], t = p[1] - 14 - 2 * h[i];
-                sh.line(x - 11, t, x - 11, t + 4, 1, col);
-                sh.line(x - 11.5F, t, x - 7, t, 1, col);
-                sh.line(x + 11, t, x + 11, t + 4, 1, col);
-                sh.line(x + 7, t, x + 11.5F, t, 1, col);
-            }
+            entry(f, i, 42 + 5 * h[i], .25F, 0xEBEBEB, "", 1);
         }
         caption(f, R_OUT + 10, 0xAAAAAA, WHITE);
     }
@@ -292,15 +296,15 @@ public final class RadialMenu {
                 sh.petal(0, 0, r1 - 1, r1, a - step / 2, a + step / 2, gap, 2,
                         hv > .01F ? c(f.acc, hv * al, f) : c(WHITE, .09F * al, f), hv > .01F ? c(f.acc, hv * al, f) : c(WHITE, .09F * al, f));
             }
+            if (f.cur >= 0) {
+                float a = f.ang(f.cur), r = 40 + 6 * h[f.cur];
+                glow(f, sh, sx(r, a), sy(r, a) - 1, 14 + 2 * h[f.cur]);
+            }
             return;
         }
         for (int i = 0; i < n; i++) {
             float dim = 1 - .45F * f.any * (1 - h[i]);
             entry(f, i, 40 + 6 * h[i], .5F, WHITE, "", dim);
-            if (i == f.cur) {
-                float a = f.ang(i);
-                sh.disc(sx(R_IN + 5, a), sy(R_IN + 5, a), 1.6F, c(f.acc, f.in[i], f), c(f.acc, f.in[i], f));
-            }
         }
         caption(f, R_OUT + 12, 0xAAAAAA, GuiShapes.mix(WHITE, f.acc, .35F));
     }
@@ -315,8 +319,8 @@ public final class RadialMenu {
             java.util.Arrays.sort(order, (p, q) -> Float.compare(h[p], h[q]));
             for (int i : order) {
                 float hv = h[i], a = f.ang(i), x = sx(44 + 7 * hv, a), y = sy(44 + 7 * hv, a), cr = (13 + 5 * hv) * (.6F + .4F * f.in[i]), al = f.in[i];
-                if (i == f.cur) sh.ring(x, y, cr + 2.5F, cr + 3.3F, c(WHITE, .65F * al, f), c(WHITE, .65F * al, f));
                 sh.disc(x, y, cr, c(0x2E323A, .92F * al, f), c(0x0E1014, .9F * al, f));
+                if (i == f.cur) glow(f, sh, x, y, cr - 1);
                 if (hv > .01F) {
                     sh.disc(x, y, cr, c(f.acc, .12F * hv, f), c(f.acc, .28F * hv, f));
                     sh.ring(x, y, cr - .5F, cr + 1, c(f.acc, hv * al, f), c(f.acc, hv * al, f));
