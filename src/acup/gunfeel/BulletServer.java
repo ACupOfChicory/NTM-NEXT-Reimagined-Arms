@@ -63,6 +63,31 @@ public final class BulletServer {
         return rule.pass() ? 2 : 1;
     }
 
+    private static final net.minecraft.sounds.SoundEvent RICOCHET_STEEL = net.minecraft.sounds.SoundEvent.createVariableRangeEvent(
+            net.minecraft.resources.Identifier.fromNamespaceAndPath("ntmgunfeel", "bullet.ricochet.steel"));
+
+    // NTM's ricochet sound (MixinRicochetSound): off a block whose hit sound is steel (bullet rules; a multiblock's
+    // cell by its machine) our steel ricochet where the bullet hit instead, and true; else false (NTM's own plays)
+    public static boolean ricochetSound(Level level, net.minecraft.world.phys.HitResult mop) {
+        if (!(mop instanceof BlockHitResult hit) || level.isClientSide()) return false;
+        BlockState state = level.getBlockState(hit.getBlockPos());
+        if (state.isAir()) return false;
+        BlockState rule = state;
+        if (state.getBlock() instanceof com.hbm.blocks.multiblock.BlockMultiblockCell) {
+            try {
+                BlockPos core = com.hbm.blocks.multiblock.MultiblockSurface.coreOfAny(level, hit.getBlockPos(), state);
+                if (core != null && !level.getBlockState(core).isAir()) rule = level.getBlockState(core);
+            } catch (RuntimeException e) {
+                // no core known: the cell's own rules
+            }
+        }
+        BulletRules.Sound s = BulletRules.hit(rule).sound();
+        if (s == null || !s.id().startsWith("ntmgunfeel:bullet.hit.steel")) return false;
+        Vec3 at = hit.getLocation();
+        level.playSound(null, at.x, at.y, at.z, RICOCHET_STEEL, net.minecraft.sounds.SoundSource.PLAYERS, 1.0F, 0.9F + level.getRandom().nextFloat() * 0.2F);
+        return true;
+    }
+
     // the bullet flew through a block it always flies through ("through"): counts as a hit on it
     public static void passed(EntityBulletBaseMK4 bullet, BlockHitResult hit) {
         if (!(bullet.level() instanceof ServerLevel level)) return;

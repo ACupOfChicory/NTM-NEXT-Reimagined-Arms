@@ -4,7 +4,7 @@ license = "GPL-3.0-or-later"
 
 [[mods]]
 modId = "ntmgunfeel"
-version="0.1.164-alpha"
+version="0.1.166-alpha"
 displayName = "NTM-NEXT Reimagined Arms"
 description = "HBM NTM guns: hold-to-aim (server), smooth camera recoil, spring model recoil, centred hip position, hidden off-hand item and corner ammo HUD (client)."
 

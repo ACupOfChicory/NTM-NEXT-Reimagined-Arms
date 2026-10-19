@@ -47,11 +47,14 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 // own shots), and a bullet hole where it hits a block. NTM's own wide ribbon is then not drawn for those bullets.
 public final class Tracers {
     // eight hole shapes, then the scorch mark left by bullets that do something on impact (explosive, incendiary)
-    private static final int HOLE_KINDS = 8, SCORCH = HOLE_KINDS;
-    private static final Identifier[] TEXTURES = new Identifier[HOLE_KINDS + 1];
+    // SCRATCH, SCRATCH + 1: a ricochet's scratch, straight along the texture's u / diagonal (u and v)
+    private static final int HOLE_KINDS = 8, SCORCH = HOLE_KINDS, SCRATCH = SCORCH + 1, KINDS = SCRATCH + 2;
+    private static final Identifier[] TEXTURES = new Identifier[KINDS];
     static {
         for (int i = 0; i < HOLE_KINDS; i++) TEXTURES[i] = Identifier.fromNamespaceAndPath("ntmgunfeel", "textures/effect/bullet_hole_" + i + ".png");
         TEXTURES[SCORCH] = Identifier.fromNamespaceAndPath("ntmgunfeel", "textures/effect/scorch.png");
+        TEXTURES[SCRATCH] = Identifier.fromNamespaceAndPath("ntmgunfeel", "textures/effect/scratch_0.png");
+        TEXTURES[SCRATCH + 1] = Identifier.fromNamespaceAndPath("ntmgunfeel", "textures/effect/scratch_1.png");
     }
     // the tracer joins the bullet's real path over this many blocks from the muzzle
     private static final float JOIN = 4F;
@@ -67,7 +70,7 @@ public final class Tracers {
         final float g;
         final double speed;
         final int dark, light;
-        final long born = System.nanoTime();
+        final long born;
         final long lifeTicks;
         Vec3 muzzleOffset = Vec3.ZERO;
         double checked; // ticks of path already tested against the world
@@ -77,6 +80,7 @@ public final class Tracers {
         volatile boolean gone; // no longer flown (its in-flight sound stops)
         float damage; // what is left of its damage (bullet rules "pierce")
         final java.util.Set<BlockPos> pierced = new java.util.HashSet<>(); // blocks it went through
+        int ricochets; // times it bounced off so far (NTM's standard ricochet)
 
         Shot(ShotPayload p, BulletConfig config, int[] colors) {
             this.config = config;
@@ -89,6 +93,26 @@ public final class Tracers {
             this.light = colors[1];
             this.lifeTicks = p.life();
             this.damage = p.damage();
+            this.born = System.nanoTime();
+        }
+
+        // the same bullet bounced off a block: from there on with the mirrored velocity, `born` = the moment it bounced
+        Shot(Shot from, Vec3 start, Vec3 v, long born, long lifeTicks) {
+            this.config = from.config;
+            this.owner = from.owner;
+            this.start = start;
+            this.v = v;
+            this.g = from.g;
+            this.speed = Math.max(v.length(), 1e-3);
+            this.dark = from.dark;
+            this.light = from.light;
+            this.lifeTicks = lifeTicks;
+            this.damage = from.damage;
+            this.born = born;
+            this.pierced.addAll(from.pierced);
+            this.ricochets = from.ricochets + 1;
+            this.whizzed = from.whizzed;
+            this.checked = 1e-4; // not at the very face it left
         }
 
         // where the bullet is after t ticks (as the server moves it), plus the muzzle offset fading out
@@ -244,6 +268,7 @@ public final class Tracers {
     }
 
     private static final List<Shot> SHOTS = new ArrayList<>();
+    private static final List<Shot> BOUNCED = new ArrayList<>(); // bullets that bounced off this frame, flown from the next
     private static final ArrayDeque<Hole> HOLES = new ArrayDeque<>();
     private static boolean serverAnnounces;
     private static long lastFrame;
@@ -397,6 +422,7 @@ public final class Tracers {
         Minecraft m = Minecraft.getInstance();
         float pixel = (float) (2.0 * Math.tan(Math.toRadians(m.options.fov().get()) * 0.5) / Math.max(1, m.getWindow().getHeight()));
         List<float[]> streaks = new ArrayList<>();
+        BOUNCED.clear();
         Iterator<Shot> it = SHOTS.iterator();
         while (it.hasNext()) {
             Shot s = it.next();
@@ -416,6 +442,8 @@ public final class Tracers {
             streaks.add(new float[] {(float) h.x, (float) h.y, (float) h.z, (float) b.x, (float) b.y, (float) b.z,
                     Float.intBitsToFloat(s.light), Float.intBitsToFloat(s.dark), pixel});
         }
+        SHOTS.addAll(BOUNCED);
+        BOUNCED.clear();
         if (!streaks.isEmpty()) {
             event.getSubmitNodeCollector().submitCustomGeometry(pose, RenderTypes.debugQuads(), (p, vc) -> {
                 long pt = Perf.start();
@@ -494,12 +522,34 @@ public final class Tracers {
         } else if (block.getType() != HitResult.Type.MISS) {
             s.end = s.checked + (t - s.checked) * (len > 1e-6 ? reach / len : 0.0);
             stop = block.getLocation();
-            long ph = Perf.start();
-            if (Config.bulletHoles && len > 1e-6) addHole(level, block, s.config, dir.scale(1.0 / len));
-            Perf.add(Perf.HOLE_MAKE, ph);
-            long px = Perf.start();
-            if (len > 1e-6) BulletFx.blockHit(level, block, dir.scale(1.0 / len), s.config.onImpact != null);
-            Perf.add(Perf.FX, px);
+            Vec3 vel = new Vec3(s.v.x, s.v.y - s.g * s.end, s.v.z);
+            if (len > 1e-6 && ricochet(s, level, block, vel)) {
+                // NTM's standard ricochet: a scratch, no hit effects (the server plays the ricochet's sound; on steel
+                // ours, BulletFx.ricochetSound); the bullet flies on mirrored on the face's axis unless that was its last
+                long ph = Perf.start();
+                if (Config.bulletHoles) {
+                    scratch = vel.normalize();
+                    try {
+                        addHole(level, block, s.config, vel.normalize());
+                    } finally {
+                        scratch = null;
+                    }
+                }
+                Perf.add(Perf.HOLE_MAKE, ph);
+                if (s.ricochets < s.config.maxRicochetCount) {
+                    Direction.Axis ax = block.getDirection().getAxis();
+                    Vec3 out = new Vec3(ax == Direction.Axis.X ? -vel.x : vel.x, ax == Direction.Axis.Y ? -vel.y : vel.y, ax == Direction.Axis.Z ? -vel.z : vel.z);
+                    long left = (long) Math.max(0.0, s.lifeTicks - s.end);
+                    if (left > 0) BOUNCED.add(new Shot(s, stop, out, s.born + (long) (s.end * 50_000_000.0), left));
+                }
+            } else {
+                long ph = Perf.start();
+                if (Config.bulletHoles && len > 1e-6) addHole(level, block, s.config, dir.scale(1.0 / len));
+                Perf.add(Perf.HOLE_MAKE, ph);
+                long px = Perf.start();
+                if (len > 1e-6) BulletFx.blockHit(level, block, dir.scale(1.0 / len), s.config.onImpact != null);
+                Perf.add(Perf.FX, px);
+            }
         }
         if (!s.whizzed) s.whizzed = BulletFx.whizz(level, s.owner, ra, stop, s.speed);
         // blocks it flew through on the way (leaves): their crumbs, no hole
@@ -508,6 +558,51 @@ public final class Tracers {
             for (BlockHitResult h : through) if (h.getLocation().distanceToSqr(ra) < far) BulletFx.blockHit(level, h, dir.scale(1.0 / len), s.config.onImpact != null);
         }
         s.checked = t;
+    }
+
+    // NTM's standard ricochet (BulletConfig.LAMBDA_STANDARD_RICOCHET) as the server has it: a bullet without an impact
+    // effect meeting a face at no more than its ricochetAngle bounces off; glass (hat instrument) and glowstone break
+    private static boolean ricochet(Shot s, ClientLevel level, BlockHitResult hit, Vec3 vel) {
+        BulletConfig c = s.config;
+        if (c.onImpact != null || c.onRicochet != BulletConfig.LAMBDA_STANDARD_RICOCHET) return false;
+        BlockState state = level.getBlockState(hit.getBlockPos());
+        if (state.isAir() || state.instrument() == net.minecraft.world.level.block.state.properties.NoteBlockInstrument.HAT
+                || state.is(net.minecraft.world.level.block.Blocks.GLOWSTONE)) return false;
+        Direction f = hit.getDirection();
+        double l = vel.length();
+        if (l < 1e-9) return false;
+        double cos = (f.getStepX() * vel.x + f.getStepY() * vel.y + f.getStepZ() * vel.z) / l;
+        double angle = Math.abs(Math.toDegrees(Math.acos(Math.clamp(cos, -1.0, 1.0))) - 90.0);
+        return angle <= c.ricochetAngle;
+    }
+
+    // set while a ricochet's scratch is made (the bullet's direction): the hole paths lay a scratch along it instead
+    private static Vec3 scratch;
+
+    // the scratch texture (straight or diagonal) and turn whose forward (texture u, or u and v) lies closest to the
+    // bullet's way; ea, eb = the world directions the texture's a, b grow along before the turn
+    private static int[] scratchPick(Vector3d ea, Vector3d eb) {
+        Vector3d d = new Vector3d(scratch.x, scratch.y, scratch.z);
+        int[] best = {SCRATCH, 0};
+        double most = -2;
+        for (int turn = 0; turn < 8; turn++) {
+            Vector3d a = new Vector3d(ea).mul((turn & 4) != 0 ? -1 : 1);
+            Vector3d u, v;
+            switch (turn & 3) {
+                case 1 -> { u = new Vector3d(eb); v = new Vector3d(a).negate(); }
+                case 2 -> { u = new Vector3d(a).negate(); v = new Vector3d(eb).negate(); }
+                case 3 -> { u = new Vector3d(eb).negate(); v = new Vector3d(a); }
+                default -> { u = new Vector3d(a); v = new Vector3d(eb); }
+            }
+            double straight = u.dot(d), diagonal = new Vector3d(u).add(v).normalize().dot(d);
+            if (straight > most) { most = straight; best = new int[] {SCRATCH, turn}; }
+            if (diagonal > most) { most = diagonal; best = new int[] {SCRATCH + 1, turn}; }
+        }
+        return best;
+    }
+
+    private static float scratchSize() {
+        return Config.holeSize * 1.4F * (0.9F + 0.2F * (float) Math.random());
     }
 
     // /gunfeel holedebug: every hit and how its hole was placed, to the log ("[holedebug]")
@@ -550,6 +645,17 @@ public final class Tracers {
         boolean scorch = config.onImpact != null;
         int kind = scorch ? SCORCH : (int) (Math.random() * HOLE_KINDS);
         float size = (scorch ? Config.scorchSize : Config.holeSize) * (0.8F + 0.4F * (float) Math.random());
+        int turn = (int) (Math.random() * 8);
+        if (scratch != null) {
+            int[] ax = axes(hit.getDirection());
+            double[] ea = new double[3], eb = new double[3];
+            ea[ax[0]] = 1;
+            eb[ax[1]] = 1;
+            int[] k = scratchPick(new Vector3d(ea[0], ea[1], ea[2]), new Vector3d(eb[0], eb[1], eb[2]));
+            kind = k[0];
+            turn = k[1];
+            size = scratchSize();
+        }
         double[] rect = faceRect(level, hit.getBlockPos(), hit.getDirection());
         Mask mask = null;
         double plane = Double.NaN;
@@ -568,7 +674,7 @@ public final class Tracers {
         double onAxis = Double.isNaN(plane) ? comp(hit.getLocation(), hit.getDirection().getAxis().ordinal()) : plane;
         boolean cull = (level.getBlockState(hit.getBlockPos()).isCollisionShapeFullBlock(level, hit.getBlockPos()) || Math.abs(onAxis - boxFace) < 1e-3)
                 && !glassLike(level.getBlockState(hit.getBlockPos()));
-        HOLES.addLast(new Hole(hit.getLocation(), hit.getDirection(), (int) (Math.random() * 8), System.nanoTime(), light, kind, size, rect, mask, plane,
+        HOLES.addLast(new Hole(hit.getLocation(), hit.getDirection(), turn, System.nanoTime(), light, kind, size, rect, mask, plane,
                 translucent(level.getBlockState(hit.getBlockPos())) || glassLike(level.getBlockState(hit.getBlockPos())),
                 cull, null, false, hit.getBlockPos().immutable(), level.getBlockState(hit.getBlockPos()), false, null, null, false));
         trimHoles();
@@ -608,10 +714,16 @@ public final class Tracers {
         int kind = scorch ? SCORCH : (int) (Math.random() * HOLE_KINDS);
         float size = (scorch ? Config.scorchSize : Config.holeSize) * (0.8F + 0.4F * (float) Math.random());
         int turn = (int) (Math.random() * 8);
+        if (scratch != null) size = scratchSize();
         double half = size * 0.5;
         // the hole's two axes in the face's plane
         Vector3d ref = Math.abs(normal.y) < 0.9 ? new Vector3d(0, 1, 0) : new Vector3d(1, 0, 0);
         Vector3d t1 = new Vector3d(normal).cross(ref).normalize(), t2 = new Vector3d(normal).cross(t1).normalize();
+        if (scratch != null) {
+            int[] k = scratchPick(t1, t2);
+            kind = k[0];
+            turn = k[1];
+        }
         // the faces in the same plane, here and around
         List<double[]> polys = new ArrayList<>();
         List<Object[]> same = new ArrayList<>();
@@ -825,9 +937,15 @@ public final class Tracers {
         int kind = scorch ? SCORCH : (int) (Math.random() * HOLE_KINDS);
         float size = (scorch ? Config.scorchSize : Config.holeSize) * (0.8F + 0.4F * (float) Math.random());
         int turn = (int) (Math.random() * 8);
+        if (scratch != null) size = scratchSize();
         double half = size * 0.5;
         Vector3d ref = Math.abs(normal.y) < 0.9 ? new Vector3d(0, 1, 0) : new Vector3d(1, 0, 0);
         Vector3d t1 = new Vector3d(normal).cross(ref).normalize(), t2 = new Vector3d(normal).cross(t1).normalize();
+        if (scratch != null) {
+            int[] k = scratchPick(t1, t2);
+            kind = k[0];
+            turn = k[1];
+        }
         Vector3d[] frame = {world, t1, t2, normal};
         // as deep as a step, a bevel or a bar standing out of the face goes (the secure door's ribs)
         double depth = Math.max(1.5 * half, 0.1);
@@ -1651,16 +1769,16 @@ public final class Tracers {
         if (HOLES.isEmpty() || !Config.bulletHoles) return;
         // the rest (fading, on moving parts, on glass, holeCache off) sent this frame, sorted in one pass
         @SuppressWarnings("unchecked")
-        List<Hole>[] groups = new List[4 * (SCORCH + 1)];
+        List<Hole>[] groups = new List[4 * KINDS];
         for (Hole h : HOLES) {
             if (BATCHED.containsKey(h)) continue;
-            int g = h.kind() + (SCORCH + 1) * ((h.late() ? 1 : 0) | (h.cull() ? 2 : 0));
+            int g = h.kind() + KINDS * ((h.late() ? 1 : 0) | (h.cull() ? 2 : 0));
             if (groups[g] == null) groups[g] = new ArrayList<>();
             groups[g].add(h);
         }
-        for (int group = 0; group < 4 * (SCORCH + 1); group++) {
-            int kind = group % (SCORCH + 1);
-            boolean late = (group / (SCORCH + 1) & 1) != 0, cull = (group / (SCORCH + 1) & 2) != 0;
+        for (int group = 0; group < 4 * KINDS; group++) {
+            int kind = group % KINDS;
+            boolean late = (group / KINDS & 1) != 0, cull = (group / KINDS & 2) != 0;
             List<Hole> list = groups[group];
             if (list == null) continue;
             RenderType type = HoleRender.type(TEXTURES[kind], late, cull);
@@ -1691,16 +1809,16 @@ public final class Tracers {
         long life = (long) (Math.max(0.1F, Config.holeLife) * 1e9);
         PoseStack.Pose pose = new PoseStack().last();
         @SuppressWarnings("unchecked")
-        List<Hole>[] groups = new List[2 * (SCORCH + 1)];
+        List<Hole>[] groups = new List[2 * KINDS];
         for (Hole h : HOLES) {
             if (!h.late()) continue;
-            int g = h.kind() + (h.cull() ? SCORCH + 1 : 0);
+            int g = h.kind() + (h.cull() ? KINDS : 0);
             if (groups[g] == null) groups[g] = new ArrayList<>();
             groups[g].add(h);
         }
-        for (int group = 0; group < 2 * (SCORCH + 1); group++) {
-            int kind = group % (SCORCH + 1);
-            boolean cull = group >= SCORCH + 1;
+        for (int group = 0; group < 2 * KINDS; group++) {
+            int kind = group % KINDS;
+            boolean cull = group >= KINDS;
             List<Hole> list = groups[group];
             if (list == null) continue;
             RenderType type = HoleRender.type(TEXTURES[kind], true, cull);

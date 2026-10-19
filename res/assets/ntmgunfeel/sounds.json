@@ -534,5 +534,41 @@
         "attenuation_distance": 24
       }
     ]
+  },
+  "bullet.ricochet.steel": {
+    "sounds": [
+      {
+        "name": "ntmgunfeel:bullet/hit/steel5",
+        "attenuation_distance": 32
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/steel6",
+        "attenuation_distance": 32
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/steel7",
+        "attenuation_distance": 32
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/steel8",
+        "attenuation_distance": 32
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/steel10",
+        "attenuation_distance": 32
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/steel11",
+        "attenuation_distance": 32
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/steel12",
+        "attenuation_distance": 32
+      },
+      {
+        "name": "ntmgunfeel:bullet/hit/steel13",
+        "attenuation_distance": 32
+      }
+    ]
   }
 }

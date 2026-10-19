@@ -3,7 +3,7 @@
   "minVersion": "0.8",
   "package": "acup.gunfeel.mixin",
   "compatibilityLevel": "JAVA_21",
-  "mixins": ["MixinHoldAim", "MixinBulletServer", "MixinThrowableHit", "MixinLegoSpread", "MixinGunConfigAnims"],
+  "mixins": ["MixinHoldAim", "MixinBulletServer", "MixinRicochetSound", "MixinThrowableHit", "MixinLegoSpread", "MixinGunConfigAnims"],
   "client": ["MixinItemGunBaseNT", "MixinItemRenderWeaponBase", "MixinHbmAnimations", "MixinClientRegistry", "MixinWholeModelGuns", "MixinRenderBulletMK4", "MixinLegoClient", "MixinSubmitNodeCollection", "MixinHbmVisual", "MixinItemInHandRenderer", "MixinHbmAnimationPayload", "MixinParticleEngine",
     "MixinSexyBottle"],
   "injectors": { "defaultRequire": 1 }
