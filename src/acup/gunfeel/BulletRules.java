@@ -34,7 +34,8 @@ public final class BulletRules {
 
     public static final String FILE = "ntm-gunfeel-bullets.txt";
 
-    // break: how a block gives way. mode: 0 never, 1 instant, 2 after `amount` hits, 3 after `amount` x hardness damage
+    // break: how a block gives way. mode: 0 never, 1 instant, 2 after `amount` hits, 3 after `amount` x hardness damage,
+    // 4 after `amount` damage whatever the hardness (hp)
     // pierce: a bullet goes through it, keeping `keep` of its damage less `pierce` x hardness (0 = never pierced)
     public record Break(int mode, float amount, boolean drop, boolean pass, boolean through, @Nullable String replace, float pierce, float keep) {
         // the bullet's damage after piercing a block of this hardness, or -1 when it stops in it
@@ -241,10 +242,11 @@ public final class BulletRules {
                 case "instant" -> 1;
                 case "hits" -> 2;
                 case "damage" -> 3;
+                case "hp" -> 4;
                 default -> 0;
             };
             float amount = 1F;
-            if ((mode == 2 || mode == 3) && w.length > 1) {
+            if ((mode == 2 || mode == 3 || mode == 4) && w.length > 1) {
                 try {
                     amount = Float.parseFloat(w[1]);
                 } catch (NumberFormatException e) {
@@ -381,8 +383,8 @@ public final class BulletRules {
             # with a block entity, drawn by a renderer or not a full cube), * = any; several with commas, no spaces.
             # For entity/kill lines: an entity id, #tag, ~pattern or *.
             #
-            # break <blocks> never | instant | hits <n> | damage <x> [drop] [pass] [replace=<block state>] [pierce=<x> [keep=<k>]]
-            #   damage <x>: breaks once the bullets' damage on it adds up to x times its hardness; hits and damage
+            # break <blocks> never | instant | hits <n> | damage <x> | hp <x> [drop] [pass] [replace=<block state>] [pierce=<x> [keep=<k>]]
+            #   damage <x>: breaks once the bullets' damage on it adds up to x times its hardness (hp <x>: to x); hits and damage
             #   show the cracks and are forgotten 20 s after the last hit. drop = drops itself; pass = the bullet
             #   flies on through the broken block; through = bullets always fly through it (no hole, no stop), it still
             #   counts the hits and breaks by its rule ("never through": flown through, never broken). A player's bullet breaks only where that player could break

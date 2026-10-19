@@ -156,12 +156,12 @@ public final class BulletServer {
         }
         long now = System.currentTimeMillis();
         forget(level, now);
-        if (rule.mode() == 2 || rule.mode() == 3) {
+        if (rule.mode() == 2 || rule.mode() == 3 || rule.mode() == 4) {
             Spot spot = new Spot(level, pos);
             Wear w = WEAR.get(spot);
             if (w != null && w.state().getBlock() != state.getBlock()) w = null;
             float add = rule.mode() == 2 ? 1F : Math.max(0F, bullet.damage);
-            float need = rule.mode() == 2 ? rule.amount() : rule.amount() * hardness;
+            float need = rule.mode() == 3 ? rule.amount() * hardness : rule.amount();
             float done = (w == null ? 0F : w.done()) + add;
             if (need > 0F && done < need) {
                 WEAR.put(spot, new Wear(done, now, state));
