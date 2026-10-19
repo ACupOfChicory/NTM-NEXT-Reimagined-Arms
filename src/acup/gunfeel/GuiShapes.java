@@ -48,6 +48,15 @@ public final class GuiShapes implements GuiElementRenderState {
 
     public void quad(float x0, float y0, int c0, float x1, float y1, int c1, float x2, float y2, int c2, float x3, float y3, int c3) {
         if ((c0 | c1 | c2 | c3) >>> 24 == 0) return;
+        // the GUI pipeline culls back faces: keep the winding that line() has (it shows), turn the others round
+        float area = (x0 * y1 - x1 * y0) + (x1 * y2 - x2 * y1) + (x2 * y3 - x3 * y2) + (x3 * y0 - x0 * y3);
+        if (area > 0) {
+            vertex(x3, y3, c3);
+            vertex(x2, y2, c2);
+            vertex(x1, y1, c1);
+            vertex(x0, y0, c0);
+            return;
+        }
         vertex(x0, y0, c0);
         vertex(x1, y1, c1);
         vertex(x2, y2, c2);
