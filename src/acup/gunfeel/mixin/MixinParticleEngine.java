@@ -24,6 +24,37 @@ public abstract class MixinParticleEngine {
     @Shadow
     public abstract void add(Particle p);
 
+    @Shadow
+    @org.spongepowered.asm.mixin.Final
+    private java.util.Map<net.minecraft.client.particle.ParticleRenderType, net.minecraft.client.particle.ParticleGroup<?>> particles;
+
+    // measured only (Perf "Not ours")
+    @org.spongepowered.asm.mixin.Unique
+    private long gunfeel$tickAt, gunfeel$extractAt;
+
+    @Inject(method = "tick", at = @At("HEAD"))
+    private void gunfeel$tickStart(org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
+        gunfeel$tickAt = System.nanoTime();
+    }
+
+    @Inject(method = "tick", at = @At("RETURN"))
+    private void gunfeel$tickEnd(org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
+        acup.gunfeel.Perf.other(acup.gunfeel.Perf.P_TICK, gunfeel$tickAt);
+    }
+
+    @Inject(method = "extract", at = @At("HEAD"))
+    private void gunfeel$extractStart(org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
+        gunfeel$extractAt = System.nanoTime();
+    }
+
+    @Inject(method = "extract", at = @At("RETURN"))
+    private void gunfeel$extractEnd(org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
+        acup.gunfeel.Perf.other(acup.gunfeel.Perf.P_EXTRACT, gunfeel$extractAt);
+        long n = 0;
+        for (net.minecraft.client.particle.ParticleGroup<?> g : particles.values()) n += g.size();
+        acup.gunfeel.Perf.particles(n);
+    }
+
     @Inject(method = "createParticle", at = @At("HEAD"), cancellable = true)
     private void gunfeel$machineCrumbs(ParticleOptions options, double x, double y, double z, double xa, double ya, double za,
             CallbackInfoReturnable<Particle> cir) {

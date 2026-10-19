@@ -27,6 +27,25 @@ public final class Perf {
     public static void batched(int n) {
         batched += n;
     }
+    // not ours, for comparing (measured only): the game's particles (tick, gathering them for drawing with how many there
+    // are, handing them to the renderer) and Flywheel's frame (NTM's explosion smoke and machines are its visuals)
+    public static final int P_TICK = 0, P_EXTRACT = 1, P_SUBMIT = 2, FW_FRAME = 3, FW_RENDER = 4;
+    private static final String[] OTHER_NAMES = {"particle tick", "particle gathering", "particle handing over", "Flywheel frame", "Flywheel drawing"};
+    private static final long[] OTHER_NANOS = new long[OTHER_NAMES.length];
+    private static final int[] OTHER_CALLS = new int[OTHER_NAMES.length];
+    private static long particles, particlesMax;
+    // the longest frame (from one frame() to the next) and how much of it was ours (the parts in the total)
+    private static long lastFrame, longest, longestOurs, ours;
+
+    public static void other(int part, long started) {
+        OTHER_NANOS[part] += System.nanoTime() - started;
+        OTHER_CALLS[part]++;
+    }
+
+    public static void particles(long n) {
+        particles += n;
+        particlesMax = Math.max(particlesMax, n);
+    }
     private static final long[] NANOS = new long[NAMES.length];
     private static final int[] CALLS = new int[NAMES.length];
     private static long since, frames;
@@ -37,8 +56,10 @@ public final class Perf {
     }
 
     public static void add(int part, long started) {
-        NANOS[part] += System.nanoTime() - started;
+        long d = System.nanoTime() - started;
+        NANOS[part] += d;
         CALLS[part]++;
+        if (part <= HOLE_BAKE) ours += d;
         if (part == FLY || part == HOLE_MAKE || part == FX || part == HOLE_BAKE) busy = true;
     }
 
@@ -63,6 +84,12 @@ public final class Perf {
         long now = System.nanoTime();
         if (since == 0L) since = now;
         frames++;
+        if (lastFrame != 0L && now - lastFrame > longest) {
+            longest = now - lastFrame;
+            longestOurs = ours;
+        }
+        lastFrame = now;
+        ours = 0;
         if (now - since < 5_000_000_000L) return;
         if (busy || holes > 0) {
             StringBuilder b = new StringBuilder();
@@ -79,7 +106,17 @@ public final class Perf {
                     Math.round(batched / f), Math.round(ONE_BY[ON_GLASS] / f), Math.round(ONE_BY[FADING] / f), Math.round(ONE_BY[MOVING] / f), Math.round(ONE_BY[OTHER] / f));
             if (moved > 0) GunFeel.LOGGER.info("Holes on moving parts moved {} times on {} block entities: pose {} (largest change {}), cut {} (largest {}){}", moved,
                     MOVED_ON.size(), byPose, poseMax, byCut, cutMax, nanSeen ? ", some first placed or reshaped" : "");
+            StringBuilder o = new StringBuilder();
+            for (int i = 0; i < OTHER_NAMES.length; i++)
+                o.append(String.format(java.util.Locale.ROOT, "%s %.3f ms (%d calls), ", OTHER_NAMES[i], OTHER_NANOS[i] / 1e6 / f, OTHER_CALLS[i]));
+            GunFeel.LOGGER.info("Not ours, a frame: {}particles {} on average, {} at most; longest frame {} ms, ours in it {} ms", o,
+                    Math.round(particles / (double) Math.max(1, OTHER_CALLS[P_EXTRACT])), particlesMax,
+                    String.format(java.util.Locale.ROOT, "%.1f", longest / 1e6), String.format(java.util.Locale.ROOT, "%.1f", longestOurs / 1e6));
         }
+        java.util.Arrays.fill(OTHER_NANOS, 0L);
+        java.util.Arrays.fill(OTHER_CALLS, 0);
+        particles = particlesMax = 0;
+        longest = longestOurs = 0;
         java.util.Arrays.fill(ONE_BY, 0L);
         batched = 0;
         moved = byPose = byCut = 0;
