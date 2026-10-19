@@ -423,9 +423,13 @@ public final class RenderedMesh {
         int y0 = Math.max(level.getMinY(), by0 - MODEL_REACH), y1 = Math.min(level.getMaxY(), by1 + MODEL_REACH);
         int z0 = bz0 - MODEL_REACH, z1 = bz1 + MODEL_REACH;
         List<BlockStateModelPart> parts = new ArrayList<>();
+        List<Tri> made = new ArrayList<>();
         net.minecraft.util.RandomSource random = net.minecraft.util.RandomSource.create();
+        // sections (16 cubed) with no model reaching out of its block are passed by for the blocks round the box
+        Map<Long, Boolean> reaching = new HashMap<>();
         for (int x = x0; x <= x1; x++) for (int y = y0; y <= y1; y++) for (int z = z0; z <= z1; z++) {
             boolean near = x >= bx0 && x <= bx1 && y >= by0 && y <= by1 && z >= bz0 && z <= bz1;
+            if (!near && !reaching.computeIfAbsent(net.minecraft.core.SectionPos.asLong(x >> 4, y >> 4, z >> 4), k -> sectionReaches(level, k))) continue;
             at.set(x, y, z);
             var st = level.getBlockState(at);
             if (st.getRenderShape() != net.minecraft.world.level.block.RenderShape.MODEL) continue;
@@ -435,7 +439,6 @@ public final class RenderedMesh {
             // only what a bullet can hit (it goes by collision): no holes on grass, flowers, crops, torches
             if (r == INSIDE && st.getCollisionShape(level, at).isEmpty()) continue;
             BlockPos block = at.immutable();
-            int before = out.size();
             parts.clear();
             random.setSeed(st.getSeed(block));
             Minecraft.getInstance().getModelManager().getBlockStateModelSet().get(st).collectParts(random, parts);
@@ -453,18 +456,31 @@ public final class RenderedMesh {
                             uv[i * 2] = UVPair.unpackU(q.packedUV(i));
                             uv[i * 2 + 1] = UVPair.unpackV(q.packedUV(i));
                         }
-                        quad(out, p, uv, atlasSprite(q.materialInfo().sprite()), true, false, block);
+                        made.clear();
+                        quad(made, p, uv, atlasSprite(q.materialInfo().sprite()), true, false, block);
+                        for (Tri t : made) {
+                            if (r != INSIDE && !reaches[0] && t.meets(cell)) reaches[0] = true;
+                            if (!t.meets(box)) continue;
+                            out.add(t);
+                            if (r == INSIDE) plain.add(t);
+                        }
                     }
                 }
             }
-            if (r == INSIDE) plain.addAll(out.subList(before, out.size()));
-            if (r != INSIDE && !reaches[0]) for (int i = before; i < out.size(); i++) if (out.get(i).meets(cell)) {
-                reaches[0] = true;
-                break;
-            }
         }
-        out.removeIf(t -> !t.meets(box));
         return out;
+    }
+
+    // a section holds a block whose model reaches out of its block (or it is not loaded: then nothing is there)
+    private static boolean sectionReaches(ClientLevel level, long key) {
+        int sx = net.minecraft.core.SectionPos.x(key), sy = net.minecraft.core.SectionPos.y(key), sz = net.minecraft.core.SectionPos.z(key);
+        var chunk = level.getChunkSource().getChunk(sx, sz, false);
+        if (chunk == null) return true;
+        int index = level.getSectionIndexFromSectionY(sy);
+        if (index < 0 || index >= chunk.getSections().length) return true;
+        var section = chunk.getSection(index);
+        if (section.hasOnlyAir()) return false;
+        return section.maybeHas(st -> st.getRenderShape() == net.minecraft.world.level.block.RenderShape.MODEL && reachOf(st) != INSIDE);
     }
 
     // NTM leaves parts to Flywheel (CrankShaft) when a visual draws them ("visualized"): draw them here too
