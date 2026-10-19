@@ -182,9 +182,26 @@ public final class BulletRules {
             } else if (s.startsWith("@")) {
                 SoundType st = SOUND_TYPES.get(s.substring(1).toLowerCase(Locale.ROOT));
                 if (st != null && state.getSoundType() == st) return true;
+            } else if (s.startsWith("%")) {
+                if (id.getNamespace().equals(s.substring(1)) && machineOrPartial(state)) return true;
             } else if (idMatches(s, id)) return true;
         }
         return false;
+    }
+
+    private static final Map<BlockState, Boolean> MACHINE = new java.util.concurrent.ConcurrentHashMap<>();
+
+    // %mod: a machine (a block entity, drawn by a renderer) or a block that is not a full cube
+    private static boolean machineOrPartial(BlockState state) {
+        return MACHINE.computeIfAbsent(state, st -> {
+            if (st.hasBlockEntity() || st.getRenderShape() != net.minecraft.world.level.block.RenderShape.MODEL) return true;
+            try {
+                return !net.minecraft.world.level.block.Block.isShapeFullBlock(
+                        st.getCollisionShape(net.minecraft.world.level.EmptyBlockGetter.INSTANCE, net.minecraft.core.BlockPos.ZERO));
+            } catch (RuntimeException e) {
+                return true;
+            }
+        });
     }
 
     static boolean entityMatches(List<String> sel, Entity e) {
@@ -349,7 +366,8 @@ public final class BulletRules {
             # last one counts. Changes apply within a second, no restart.
             #
             # Who: a block id (minecraft:ice), a tag (#minecraft:leaves), a pattern (~minecraft:.*_glass), a block
-            # sound type (@metal, @wood, @glass, @stone, @grass ...), * = any; several with commas, no spaces.
+            # sound type (@metal, @wood, @glass, @stone, @grass ...), a mod's machines and partial blocks (%hbm: its blocks
+            # with a block entity, drawn by a renderer or not a full cube), * = any; several with commas, no spaces.
             # For entity/kill lines: an entity id, #tag, ~pattern or *.
             #
             # break <blocks> never | instant | hits <n> | damage <x> [drop] [pass] [replace=<block state>] [pierce=<x> [keep=<k>]]

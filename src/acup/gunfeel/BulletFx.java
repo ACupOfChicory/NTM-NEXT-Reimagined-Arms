@@ -76,7 +76,18 @@ public final class BulletFx {
             sd("  skipped: air there on the client");
             return;
         }
-        BulletRules.Effect fx = BulletRules.hit(state);
+        // a cell of an NTM multiblock (the shared multiblock_cell_* blocks): the rules of its machine
+        BlockState ruleState = state;
+        if (state.getBlock() instanceof com.hbm.blocks.multiblock.BlockMultiblockCell) {
+            try {
+                net.minecraft.core.BlockPos core = com.hbm.blocks.multiblock.MultiblockSurface.clientCoreOf(level, hit.getBlockPos());
+                if (core != null && !level.getBlockState(core).isAir()) ruleState = level.getBlockState(core);
+            } catch (RuntimeException e) {
+                // no core known here: the cell's own rules
+            }
+            if (debugSound) sd("  cell of {}", BuiltInRegistries.BLOCK.getKey(ruleState.getBlock()));
+        }
+        BulletRules.Effect fx = BulletRules.hit(ruleState);
         if (fx.empty()) {
             sd("  skipped: no hit rule gives it particles or a sound");
             return;

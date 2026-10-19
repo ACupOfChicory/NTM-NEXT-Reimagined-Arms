@@ -12,7 +12,12 @@ hit @wood,@nether_wood,@bamboo_wood,@cherry_wood,@bamboo,@scaffolding,@ladder,@h
 hit @gravel,@grass,@rooted_dirt,@mud,@sand,@soul_sand,@soul_soil,@moss,@moss_carpet,@packed_mud,@snow,@powder_snow particles=block*6,minecraft:smoke*1 sound=ntmgunfeel:bullet.hit.dirt/0.8 range=40
 hit minecraft:gravel,minecraft:suspicious_gravel particles=block*6,minecraft:smoke*1 sound=ntmgunfeel:bullet.hit.gravel/0.8 range=40
 hit @stone,@deepslate,@deepslate_bricks,@deepslate_tiles,@polished_deepslate,@tuff,@tuff_bricks,@polished_tuff,@calcite,@basalt,@netherrack,@nether_bricks,@nether_ore,@nether_gold_ore,@dripstone_block,@pointed_dripstone,@mud_bricks,@bone_block,@ancient_debris,@gilded_blackstone,@amethyst particles=block*6,minecraft:smoke*1 sound=ntmgunfeel:bullet.hit.stone/0.8 range=40
-hit ~minecraft:.*_concrete,~hbm:.*concrete.*,~hbm:.*ducrete.*,~hbm:asphalt.*,~hbm:cmb_brick.* particles=block*6,minecraft:smoke*1 sound=ntmgunfeel:bullet.hit.concrete/0.8 range=40
 hit @metal,@copper,@copper_bulb,@copper_grate,@chain,@anvil,@heavy_core,@iron,@lantern,@netherite_block,@vault,@trial_spawner particles=block*4,minecraft:crit*2 sound=ntmgunfeel:bullet.hit.metal/0.8 range=40
+# NTM machines and partial blocks: steel, whatever their sound type (then concrete and steel by name win)
+hit %hbm particles=block*4,minecraft:crit*2 sound=ntmgunfeel:bullet.hit.steel/0.8 range=40
+hit ~minecraft:.*_concrete,~hbm:.*concrete.*,~hbm:.*ducrete.*,~hbm:asphalt.*,~hbm:cmb_brick.* particles=block*6,minecraft:smoke*1 sound=ntmgunfeel:bullet.hit.concrete/0.8 range=40
 hit ~hbm:.*steel.*,hbm:platemetal,~hbm:.*tungsten.*,~hbm:.*titanium.*,~hbm:machine_.*,~hbm:.*_beam,~hbm:.*_poles particles=block*4,minecraft:crit*2 sound=ntmgunfeel:bullet.hit.steel/0.8 range=40
+# brick-built machines (foundry, combination oven, crucible, blast and brick furnaces, chimneys, electrolyser, cooling towers): concrete, the nearest sound
+hit hbm:foundry_basin,hbm:foundry_channel,hbm:foundry_mold,hbm:foundry_outlet,hbm:foundry_slagtap,hbm:foundry_tank,hbm:furnace_combination,hbm:machine_crucible,hbm:machine_blast_furnace,hbm:machine_furnace_brick,hbm:chimney_brick,hbm:chimney_industrial,hbm:machine_electrolyser,hbm:machine_tower_small,hbm:machine_tower_large particles=block*6,minecraft:smoke*1 sound=ntmgunfeel:bullet.hit.concrete/0.8 range=40
+hit hbm:radio_telex particles=block*6,minecraft:smoke*1 sound=ntmgunfeel:bullet.hit.wood/0.8 range=40
 whizz sound=ntmgunfeel:bullet.whizz/0.9 radius=3 crack=ntmgunfeel:bullet.crack/0.7 crackradius=1.2
