@@ -155,6 +155,8 @@ public final class AmmoLock {
         }
         if (took == 0) return true;
         mag.setAmount(gun, Math.min(loaded + took * per, mag.capacity));
+        // the menu's choice is for one reload: after it the gun takes ammo as NTM does (first found)
+        if (chosen(gun) == type) ItemGunBaseNT.setValueInt(gun, NEXT, 0);
         String key = FROM_BAG + mag.index;
         ItemGunBaseNT.setValueInt(gun, key, fromBag || (loaded > 0 && ItemGunBaseNT.getValueInt(gun, key) != 0) ? 1 : 0);
         return true;
@@ -181,6 +183,7 @@ public final class AmmoLock {
             }
         }
         ItemGunBaseNT.setValueInt(stack, KEY, on ? 1 : 0);
+        ItemGunBaseNT.setValueInt(stack, NEXT, 0); // locked: keeps its type; unlocked: back to NTM's choice
         player.sendOverlayMessage(on
                 ? Component.translatable("message.ntmgunfeel.ammo_locked", icon == null || icon.isEmpty() ? Component.literal("?") : icon.getHoverName())
                 : Component.translatable("message.ntmgunfeel.ammo_unlocked"));
