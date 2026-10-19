@@ -6,7 +6,8 @@ public final class Perf {
     private Perf() {
     }
 
-    // (flight holds making holes and hit effects; drawing holes holds following parts and block checks)
+    // (flight holds hit effects; making holes runs apart, a few a frame; drawing holes holds following parts and block
+    // checks)
     public static final int FLY = 0, HOLE_MAKE = 1, FX = 2, HOLE_DRAW = 3, TRACERS = 4, HOLE_BAKE = 5, FOLLOW = 6, CHECKS = 7;
     private static final String[] NAMES = {"flight", "making holes", "hit effects", "drawing holes", "tracers", "baking holes", "following parts",
             "block checks"};

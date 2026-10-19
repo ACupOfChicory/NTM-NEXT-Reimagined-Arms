@@ -421,6 +421,7 @@ public final class Tracers {
         for (Shot s : SHOTS) s.gone = true;
         SHOTS.clear();
         HOLES.clear();
+        PENDING.clear();
         for (Batch b : BATCHES) if (b.vb != null) b.vb.close();
         BATCHES.clear();
         BATCHED.clear();
@@ -472,6 +473,7 @@ public final class Tracers {
                 Perf.add(Perf.TRACERS, pt);
             });
         }
+        makePending();
         long pd = Perf.start();
         holes(event, cam, now);
         Perf.add(Perf.HOLE_DRAW, pd);
@@ -522,12 +524,10 @@ public final class Tracers {
             if (!known) {
                 s.pierced.add(pos);
                 s.damage = left;
-                long ph = Perf.start();
                 if (Config.bulletHoles) {
                     addHole(level, block, s.config, unit);
                     addHole(level, out, s.config, unit.scale(-1.0));
                 }
-                Perf.add(Perf.HOLE_MAKE, ph);
                 long px = Perf.start();
                 BulletFx.blockHit(level, block, unit);
                 BulletFx.blockHit(level, out, unit.scale(-1.0));
@@ -556,7 +556,6 @@ public final class Tracers {
                 // ours, BulletFx.ricochetSound); the bullet flies on mirrored on the face's axis unless that was its last
                 BulletFx.sd("ricochet off {} at {} (bounce {} of {})", net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(level.getBlockState(block.getBlockPos()).getBlock()),
                         block.getBlockPos().toShortString(), s.ricochets + 1, s.config.maxRicochetCount);
-                long ph = Perf.start();
                 if (Config.bulletHoles) {
                     scratch = vel.normalize();
                     try {
@@ -565,7 +564,6 @@ public final class Tracers {
                         scratch = null;
                     }
                 }
-                Perf.add(Perf.HOLE_MAKE, ph);
                 if (s.ricochets < s.config.maxRicochetCount) {
                     Direction.Axis ax = block.getDirection().getAxis();
                     Vec3 out = new Vec3(ax == Direction.Axis.X ? -vel.x : vel.x, ax == Direction.Axis.Y ? -vel.y : vel.y, ax == Direction.Axis.Z ? -vel.z : vel.z);
@@ -573,9 +571,7 @@ public final class Tracers {
                     if (left > 0) BOUNCED.add(new Shot(s, stop, out, s.born + (long) (s.end * 50_000_000.0), left));
                 }
             } else {
-                long ph = Perf.start();
                 if (Config.bulletHoles && len > 1e-6) addHole(level, block, s.config, dir.scale(1.0 / len));
-                Perf.add(Perf.HOLE_MAKE, ph);
                 long px = Perf.start();
                 if (len > 1e-6) BulletFx.blockHit(level, block, dir.scale(1.0 / len), s.config.onImpact != null);
                 Perf.add(Perf.FX, px);
@@ -657,7 +653,38 @@ public final class Tracers {
         return String.format(java.util.Locale.ROOT, "(%.4f %.4f %.4f)", p.x, p.y, p.z);
     }
 
+    // holes waiting to be made: a burst's holes (a shotgun, explosive rounds into a scaffold) are made over the next
+    // frames, as many as fit in HOLE_BUDGET_NS a frame (at least one), instead of all in the frame they were hit
+    private record Pending(ClientLevel level, BlockHitResult hit, BulletConfig config, Vec3 dir, Vec3 scratch) {
+    }
+
+    private static final ArrayDeque<Pending> PENDING = new ArrayDeque<>();
+    private static final long HOLE_BUDGET_NS = 3_000_000L;
+
     private static void addHole(ClientLevel level, BlockHitResult hit, BulletConfig config, Vec3 dir) {
+        PENDING.addLast(new Pending(level, hit, config, dir, scratch));
+    }
+
+    private static void makePending() {
+        long from = System.nanoTime();
+        int made = 0;
+        ClientLevel now = Minecraft.getInstance().level;
+        while (!PENDING.isEmpty() && (made == 0 || System.nanoTime() - from < HOLE_BUDGET_NS)) {
+            Pending p = PENDING.pollFirst();
+            if (p.level() != now || !Config.bulletHoles) continue;
+            long ph = Perf.start();
+            scratch = p.scratch();
+            try {
+                makeHole(p.level(), p.hit(), p.config(), p.dir());
+            } finally {
+                scratch = null;
+            }
+            Perf.add(Perf.HOLE_MAKE, ph);
+            made++;
+        }
+    }
+
+    private static void makeHole(ClientLevel level, BlockHitResult hit, BulletConfig config, Vec3 dir) {
         if (debugHoles) {
             BlockState hs = level.getBlockState(hit.getBlockPos());
             dbg("HIT {} {} face={} at={} inside={} dir={} shape={} structureCells={} hitboxOnly={}", hit.getBlockPos(), PassableClip.key(hs), hit.getDirection(),
