@@ -84,7 +84,7 @@ public final class Hud {
         int smallX = right - smallW;
         if (small != null) g.text(font, small, smallX, top + 2, GREY, true);
         if (icon != null && !icon.isEmpty()) g.item(icon, smallX, top + 12);
-        if (AmmoLock.locked(stack)) lock(g, smallX + 12, top + 21); // on the icon's lower right corner
+        if (AmmoLock.locked(stack)) lock(g, smallX + 18, top + 17);
 
         // big magazine count at 2x, leading zeros dimmed
         int bigW = font.width(big) * 2;
