@@ -15,7 +15,7 @@ import net.neoforged.neoforge.client.event.RenderGuiEvent;
 import net.neoforged.neoforge.common.NeoForge;
 
 // Client: the ammo key (Controls, "NTM-NEXT Reimagined Arms"; Y by default). A tap locks or unlocks the held gun's
-// ammo type; held, it opens the radial ammo menu (not on a locked gun), let go it takes the hovered ammo.
+// ammo type; held, it opens the radial ammo menu (on a locked gun too: the lock moves to the chosen ammo), let go it takes the hovered ammo.
 public final class AmmoLockKey {
     public static final KeyMapping.Category CATEGORY = new KeyMapping.Category(Identifier.fromNamespaceAndPath("ntmgunfeel", "main"));
     public static final KeyMapping KEY = new KeyMapping("key.ntmgunfeel.ammo_lock", 89 /* GLFW_KEY_Y */, CATEGORY);
@@ -54,7 +54,7 @@ public final class AmmoLockKey {
         }
         if (down && !held && now - downAt >= HOLD_MS) {
             held = true;
-            if (gun && !AmmoLock.locked(stack)) RadialMenu.open(stack);
+            if (gun) RadialMenu.open(stack);
         }
         if (!down && wasDown) {
             if (RadialMenu.isOpen()) {

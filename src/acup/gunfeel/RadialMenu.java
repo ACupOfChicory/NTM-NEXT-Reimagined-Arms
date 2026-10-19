@@ -266,14 +266,15 @@ public final class RadialMenu {
         }
         for (int i = 0; i < n; i++) {
             float[] p = entry(f, i, 42 + 5 * h[i], .25F, i == f.cur ? f.acc : 0xEBEBEB, "", 1);
-            if (i == f.cur) { // the loaded type: two corners on its outer side, turned with the sector
+            if (i == f.cur) { // the loaded type: four corners round its icon and count, upright
                 int col = c(f.acc, f.in[i], f);
-                float a = f.ang(i), ux = sx(1, a), uy = sy(1, a), vx = -uy, vy = ux; // u out from the centre, v along
-                float x = p[0], y = p[1] + 1, o = 15 + 2 * h[i]; // around the middle of icon + count
+                float x = p[0], t = p[1] - 14 - 2 * h[i], b = p[1] + 16 + 3 * h[i];
                 for (int sgn = -1; sgn <= 1; sgn += 2) {
-                    float cx = x + ux * o + vx * 11 * sgn, cy = y + uy * o + vy * 11 * sgn;
-                    sh.line(cx, cy, cx - ux * 4, cy - uy * 4, 1, col);
-                    sh.line(cx + vx * .5F * sgn, cy + vy * .5F * sgn, cx - vx * 4 * sgn, cy - vy * 4 * sgn, 1, col);
+                    float cx = x + 11 * sgn;
+                    sh.line(cx, t, cx, t + 4, 1, col);
+                    sh.line(cx + .5F * sgn, t, cx - 4 * sgn, t, 1, col);
+                    sh.line(cx, b, cx, b - 4, 1, col);
+                    sh.line(cx + .5F * sgn, b, cx - 4 * sgn, b, 1, col);
                 }
             }
         }

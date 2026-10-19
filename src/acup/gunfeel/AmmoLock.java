@@ -189,10 +189,11 @@ public final class AmmoLock {
                 : Component.translatable("message.ntmgunfeel.ammo_unlocked"));
     }
 
-    // the server: the radial menu chose `id` for the held gun: unload the magazine, reload with it
+    // the server: the radial menu chose `id` for the held gun: unload the magazine, reload with it (a locked gun stays
+    // locked, now on that type)
     public static void select(ServerPlayer player, int id) {
         ItemStack stack = player.getMainHandItem();
-        if (!(stack.getItem() instanceof ItemGunBaseNT gun) || locked(stack) || id < 0 || id >= BulletConfig.configs.size()) return;
+        if (!(stack.getItem() instanceof ItemGunBaseNT gun) || id < 0 || id >= BulletConfig.configs.size()) return;
         for (int c = 0; c < gun.getConfigCount(); c++) if (ItemGunBaseNT.getState(stack, c) != ItemGunBaseNT.GunState.IDLE) return;
         IMagazine<?> mag = primary(stack);
         BulletConfig target = BulletConfig.configs.get(id);
