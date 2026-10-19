@@ -5,6 +5,6 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": ["MixinHoldAim", "MixinBulletServer", "MixinRicochetSound", "MixinAmmoLock", "MixinAmmoLockBelt", "MixinThrowableHit", "MixinLegoSpread", "MixinGunConfigAnims"],
   "client": ["MixinItemGunBaseNT", "MixinItemRenderWeaponBase", "MixinHbmAnimations", "MixinClientRegistry", "MixinWholeModelGuns", "MixinRenderBulletMK4", "MixinLegoClient", "MixinSubmitNodeCollection", "MixinHbmVisual", "MixinItemInHandRenderer", "MixinHbmAnimationPayload", "MixinParticleEngine",
-    "MixinSexyBottle", "MixinMouseTurn", "MixinGunKeysRadial", "KeyMappingAccess"],
+    "MixinSexyBottle", "MixinMouseTurn", "MixinGunKeysRadial", "KeyMappingAccess", "GuiGraphicsAccess"],
   "injectors": { "defaultRequire": 1 }
 }

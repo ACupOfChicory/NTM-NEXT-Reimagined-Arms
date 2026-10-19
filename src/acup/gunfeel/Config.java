@@ -38,6 +38,8 @@ public final class Config {
     public static float ntmRecoilAnim = 0.3F;
     public static boolean hideOffhand = true;
     public static boolean cornerHud = true;
+    public static String ammoMenu = "steel";
+    public static int ammoMenuColor = 0xFFB63E;
     // Both-hands grip. Each arm runs from its hand back along a fixed direction (camera frame: +X left,
     // +Y up, +Z forward) until it reaches the depth armReach*; the directions follow how a modern
     // shooter's arms come into view (right arm back past the cheek, left arm up from below).
@@ -145,6 +147,8 @@ public final class Config {
             ntmRecoilAnim: share of NTM's own recoil animation kept, 1 = unchanged
             hideOffhand: hide the off-hand item while holding an NTM gun
             cornerHud: TaCZ-style ammo counter in the bottom-right corner instead of NTM's
+            ammoMenu: look of the ammo menu (hold Y): steel, petals, bubbles, ntm, glass, arc
+            ammoMenuColor: accent colour of the ammo menu, hex RRGGBB
             arms: draw the player's arms holding the gun with both hands
             armScale: arm thickness on top of the automatic one, 1 = vanilla arm proportions
             armMaxScale: upper limit of the automatic thickness
@@ -319,6 +323,12 @@ public final class Config {
         ntmRecoilAnim = num(p, "ntmRecoilAnim", ntmRecoilAnim);
         hideOffhand = bool(p, "hideOffhand", hideOffhand);
         cornerHud = bool(p, "cornerHud", cornerHud);
+        ammoMenu = p.getProperty("ammoMenu", ammoMenu).trim().toLowerCase(java.util.Locale.ROOT);
+        try {
+            ammoMenuColor = Integer.parseInt(p.getProperty("ammoMenuColor", String.format("%06x", ammoMenuColor)).trim().replace("#", ""), 16) & 0xFFFFFF;
+        } catch (NumberFormatException e) {
+            ammoMenuColor = 0xFFB63E;
+        }
         arms = bool(p, "arms", arms);
         armScale = num(p, "armScale", armScale);
         armRollRight = num(p, "armRollRight", armRollRight);
@@ -424,6 +434,8 @@ public final class Config {
         p.setProperty("ntmRecoilAnim", Float.toString(ntmRecoilAnim));
         p.setProperty("hideOffhand", Boolean.toString(hideOffhand));
         p.setProperty("cornerHud", Boolean.toString(cornerHud));
+        p.setProperty("ammoMenu", ammoMenu);
+        p.setProperty("ammoMenuColor", String.format("%06x", ammoMenuColor));
         p.setProperty("arms", Boolean.toString(arms));
         p.setProperty("armScale", Float.toString(armScale));
         p.setProperty("armRollRight", Float.toString(armRollRight));
