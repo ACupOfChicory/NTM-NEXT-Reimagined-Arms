@@ -32,6 +32,27 @@ public final class BulletFx {
         return BuiltInRegistries.SOUND_EVENT.getOptional(key).orElseGet(() -> SoundEvent.createVariableRangeEvent(key));
     }
 
+    // sound families: an event `x` may come with `x.f1`, `x.f2`… (groups of similar-sounding tracks, sounds.json).
+    // Hits of the same event within FAMILY_MS share one family, so one shot's pellets sound alike; the next shot rolls again
+    private static final long FAMILY_MS = 80L;
+    private static final java.util.Map<String, long[]> FAMILY = new java.util.HashMap<>();
+
+    private static String familyOf(String id, RandomSource r) {
+        Identifier key = Identifier.tryParse(id);
+        if (key == null) return id;
+        var sm = Minecraft.getInstance().getSoundManager();
+        int n = 0;
+        while (n < 16 && sm.getSoundEvent(key.withSuffix(".f" + (n + 1))) != null) n++;
+        if (n == 0) return id;
+        long now = System.currentTimeMillis();
+        long[] last = FAMILY.get(id);
+        if (last == null || now - last[0] > FAMILY_MS || last[1] >= n) {
+            last = new long[] {now, r.nextInt(n)};
+            FAMILY.put(id, last);
+        }
+        return id + ".f" + (last[1] + 1);
+    }
+
     public static void blockHit(ClientLevel level, BlockHitResult hit, Vec3 dir) {
         if (!Config.bulletFx) return;
         BlockState state = level.getBlockState(hit.getBlockPos());
@@ -107,7 +128,7 @@ public final class BulletFx {
         }
         BulletRules.Sound s = fx.sound();
         if (s == null) return;
-        SoundEvent e = s.id().equalsIgnoreCase("block") ? state.getSoundType().getHitSound() : event(s.id());
+        SoundEvent e = s.id().equalsIgnoreCase("block") ? state.getSoundType().getHitSound() : event(familyOf(s.id(), r));
         if (e == null) return;
         play(level, at, e, s.volume(), s.pitch() * (0.9F + r.nextFloat() * 0.2F), fx.range());
     }
