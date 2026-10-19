@@ -970,6 +970,7 @@ public final class Tracers {
         AABB reach = new AABB(world.x, world.y, world.z, world.x, world.y, world.z).inflate(half * 2.2);
         List<RenderedMesh.Tri> near = new ArrayList<>();
         for (RenderedMesh.Tri t : tris) if (t.meets(reach)) near.add(t);
+        TriGrid grid = new TriGrid(near);
         List<Piece> pieces = new ArrayList<>();
         for (RenderedMesh.Tri t : near) {
             Piece pc = piece(t, frame, half, depth);
@@ -997,7 +998,7 @@ public final class Tracers {
             long sh0 = System.nanoTime();
             for (int s = 0; s <= pc.poly().size() && !shown; s++) {
                 double[] sm = s == 0 ? cen : lerp(pc.poly().get(s - 1), cen, 0.2);
-                shown = !hidden(near, pc, sm);
+                shown = !hidden(grid, pc, sm);
             }
             hideNs += System.nanoTime() - sh0;
             if (!shown) {
@@ -1053,7 +1054,7 @@ public final class Tracers {
                 List<List<double[]>> made = new ArrayList<>(g.polys().subList(before, g.polys().size()));
                 g.polys().subList(before, g.polys().size()).clear();
                 long st = System.nanoTime();
-                for (List<double[]> pl : made) shade(near, pc, pl, blasts, lit, g.polys());
+                for (List<double[]> pl : made) shade(grid, pc, pl, blasts, lit, g.polys());
                 shadeNs += System.nanoTime() - st;
                 if (g.polys().size() == before) hiddenPieces++;
             }
@@ -1356,21 +1357,19 @@ public final class Tracers {
     }
 
     // a shown pixel of another triangle lies on the straight line from this point of the piece to the hit
-    private static RenderedMesh.Tri blocker(List<RenderedMesh.Tri> near, Piece self, double[] at, Vector3d blast) {
+    private static RenderedMesh.Tri blocker(TriGrid grid, Piece self, double[] at, Vector3d blast) {
         Vector3d from = new Vector3d(at[2], at[3], at[4]).fma(1e-3, self.tn());
         Vector3d d = new Vector3d(blast).sub(from);
         double len = d.length();
         if (len < 1e-4) return null;
         d.div(len);
-        AABB line = new AABB(from.x, from.y, from.z, blast.x, blast.y, blast.z);
-        for (RenderedMesh.Tri o : near) {
-            if (o == self.tri() || !o.meets(line)) continue;
+        return grid.first(from, blast, o -> {
+            if (o == self.tri()) return false;
             double k = o.cross(from, d);
-            if (Double.isNaN(k) || k <= 1e-4 || k >= len - 1e-4) continue;
+            if (Double.isNaN(k) || k <= 1e-4 || k >= len - 1e-4) return false;
             double[] w = o.weights(new Vector3d(d).mul(k).add(from), 1e-6);
-            if (w != null && o.opaqueAt(w)) return o;
-        }
-        return null;
+            return w != null && o.opaqueAt(w);
+        });
     }
 
     // the centre and eight points on a circle of radius r round it, in the plane across n
@@ -1387,7 +1386,7 @@ public final class Tracers {
     }
 
     // how much of the blast reaches a point: the share of the blast's points with a clear line to it, eased
-    private static double reach(List<RenderedMesh.Tri> near, Piece self, double[] v, List<Vector3d> blasts, Map<List<Long>, Double> lit) {
+    private static double reach(TriGrid near, Piece self, double[] v, List<Vector3d> blasts, Map<List<Long>, Double> lit) {
         List<Long> key = List.of(Math.round(v[2] * 1e5), Math.round(v[3] * 1e5), Math.round(v[4] * 1e5));
         Double got = lit.get(key);
         if (got != null) return got;
@@ -1402,7 +1401,7 @@ public final class Tracers {
     // a polygon of a hole on another block, shaded by what stands between it and the blast: whole where it is all
     // reached, nothing where none of it is, else cells of 1/16 block (on the hole's u, v) with their vertices' share
     // as alpha, so the shadow's edge fades
-    private static void shade(List<RenderedMesh.Tri> near, Piece self, List<double[]> poly, List<Vector3d> blasts, Map<List<Long>, Double> lit,
+    private static void shade(TriGrid near, Piece self, List<double[]> poly, List<Vector3d> blasts, Map<List<Long>, Double> lit,
             List<List<double[]>> out) {
         // only what can stand between this polygon and the blast
         double x0 = Double.MAX_VALUE, y0 = x0, z0 = x0, x1 = -x0, y1 = x1, z1 = x1;
@@ -1415,13 +1414,10 @@ public final class Tracers {
             x1 = Math.max(x1, b.x); y1 = Math.max(y1, b.y); z1 = Math.max(z1, b.z);
         }
         AABB span = new AABB(x0, y0, z0, x1, y1, z1).inflate(1e-3);
-        List<RenderedMesh.Tri> between = new ArrayList<>();
-        for (RenderedMesh.Tri o : near) if (o != self.tri() && o.meets(span)) between.add(o);
-        if (between.isEmpty()) {
+        if (!near.anyIn(span, o -> o != self.tri())) {
             out.add(poly);
             return;
         }
-        near = between;
         double cs = 1.0 / 16;
         double[] box = box2(poly);
         int i0 = (int) Math.floor(box[0] / cs), i1 = (int) Math.ceil(box[1] / cs), j0 = (int) Math.floor(box[2] / cs), j1 = (int) Math.ceil(box[3] / cs);
@@ -1452,21 +1448,19 @@ public final class Tracers {
     }
 
     // a shown pixel of another triangle is in front of this point of the piece, towards the shooter
-    private static boolean hidden(List<RenderedMesh.Tri> near, Piece self, double[] at) {
+    private static boolean hidden(TriGrid grid, Piece self, double[] at) {
         Vector3d n = self.frame()[3];
         Vector3d from = new Vector3d(at[2], at[3], at[4]).fma(1e-3, self.tn());
         // as far as the slab reaches (an occluder further out does not lie over the hole's faces)
         double far = 2 * Math.abs(self.frame()[0].distance(from)) + 0.1;
-        AABB line = new AABB(from.x, from.y, from.z, from.x + n.x * far, from.y + n.y * far, from.z + n.z * far);
-        for (RenderedMesh.Tri o : near) {
-            if (o == self.tri() || !o.meets(line)) continue;
+        Vector3d to = new Vector3d(n).mul(far).add(from);
+        return grid.first(from, to, o -> {
+            if (o == self.tri()) return false;
             double k = o.cross(from, n);
-            if (Double.isNaN(k) || k <= 1e-4 || k > far) continue;
+            if (Double.isNaN(k) || k <= 1e-4 || k > far) return false;
             double[] w = o.weights(new Vector3d(n).mul(k).add(from), 1e-6);
-            if (w == null || !o.opaqueAt(w)) continue;
-            return true;
-        }
-        return false;
+            return w != null && o.opaqueAt(w);
+        }) != null;
     }
 
     // another face lies back to back with the group's (a thin sheet: bars, a pane): the hole is seen from both sides
