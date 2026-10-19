@@ -457,13 +457,20 @@ public final class Tracers {
         Perf.frame(SHOTS.size(), HOLES.size());
     }
 
+    // the point of the tested path at t ticks. The first tick runs straight from the shooter's eyes to where the
+    // bullet is after it, as the server tests it (a bend at the muzzle would cut corners the server's bullet passes)
+    private static Vec3 tested(Shot s, double t) {
+        Vec3 p = s.start.add(s.v.x * t, s.v.y * t - 0.5 * s.g * t * t, s.v.z * t);
+        if (s.eye == null || t >= 1.0) return p;
+        Vec3 one = s.start.add(s.v.x, s.v.y - 0.5 * s.g, s.v.z);
+        return s.eye.add(one.subtract(s.eye).scale(t));
+    }
+
     // test the bullet's path up to t ticks against blocks and entities; stops it at the first thing it meets
     private static void fly(Shot s, ClientLevel level, double t) {
         if (!Double.isNaN(s.end) || t <= s.checked) return;
         // the real path, without the muzzle offset, decides what is hit
-        Vec3 ra = s.checked == 0.0 && s.eye != null ? s.eye
-                : s.start.add(s.v.x * s.checked, s.v.y * s.checked - 0.5 * s.g * s.checked * s.checked, s.v.z * s.checked);
-        Vec3 rb = s.start.add(s.v.x * t, s.v.y * t - 0.5 * s.g * t * t, s.v.z * t);
+        Vec3 ra = tested(s, s.checked), rb = tested(s, t);
         List<BlockHitResult> through = new ArrayList<>();
         Vec3 dir = rb.subtract(ra);
         double len = dir.length();
