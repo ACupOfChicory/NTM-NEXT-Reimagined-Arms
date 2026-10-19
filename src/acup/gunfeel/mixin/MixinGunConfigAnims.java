@@ -31,20 +31,23 @@ public abstract class MixinGunConfigAnims {
 
     // Sexy / Heretic inspect: the bottle waits below the screen while the left hand lets go of the gun and
     // drops, then comes up as NTM has it; the gulps and the effects come as much later
-    private static final int SEXY_BOTTLE_WAIT_MS = 250, SEXY_BOTTLE_WAIT_TICKS = SEXY_BOTTLE_WAIT_MS / 50;
+    // NTM's bottle starts and ends at y -8, a little of it still on screen: 3 lower here; at the end the
+    // animation waits while the hand goes back to the gun after the bottle is gone
+    private static final int SEXY_BOTTLE_WAIT_MS = 250, SEXY_BOTTLE_WAIT_TICKS = SEXY_BOTTLE_WAIT_MS / 50, SEXY_HAND_BACK_MS = 250;
 
     private static final BiFunction<ItemStack, GunAnimation, BusAnimation> SEXY = (stack, type) -> {
         if (type != GunAnimation.INSPECT) return XFactory12ga.LAMBDA_SEXY_ANIMS.apply(stack, type);
         int w = SEXY_BOTTLE_WAIT_MS;
         return new BusAnimation()
                 .addBus("BOTTLE", new BusAnimationSequence()
-                        .setPos(8.0, -8.0, -2.0)
+                        .setPos(8.0, -11.0, -2.0)
                         .hold(w)
                         .addPos(6.0, -4.0, -2.0, 500, IType.SIN_DOWN)
                         .addPos(3.0, -3.0, -5.0, 500, IType.SIN_FULL)
                         .addPos(3.0, -2.0, -5.0, 1000)
                         .addPos(4.0, -6.0, -2.0, 750, IType.SIN_FULL)
-                        .addPos(6.0, -8.0, -2.0, 500, IType.SIN_UP))
+                        .addPos(6.0, -11.0, -2.0, 500, IType.SIN_UP)
+                        .hold(SEXY_HAND_BACK_MS))
                 .addBus("SIP", new BusAnimationSequence()
                         .setPos(25.0, 0.0, 0.0)
                         .hold(500 + w)
