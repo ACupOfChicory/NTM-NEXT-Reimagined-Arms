@@ -24,3 +24,14 @@ The same jar goes on the client and the server.
 ## Build
 
 `./build.sh` compiles against the libraries of a local Prism Launcher NeoForge 26.2 instance.
+
+## License
+
+Copyright (C) 2026 ACupOfChicory
+
+The code is free software: you can redistribute it and/or modify it under the terms of the GNU General Public
+License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later
+version. See [LICENSE](LICENSE).
+
+Sounds under `res/assets/ntmgunfeel/sounds/` come from freesound.org and keep their own licenses (CC0 1.0 or
+CC BY 3.0/4.0); authors and links are in [CREDITS.txt](res/assets/ntmgunfeel/sounds/bullet/CREDITS.txt).
