@@ -621,6 +621,10 @@ public final class Tracers {
     // /gunfeel holedebug: every hit and how its hole was placed, to the log ("[holedebug]")
     public static volatile boolean debugHoles;
 
+    private static String ms(long ns) {
+        return String.format(java.util.Locale.ROOT, "%.1f", ns / 1e6);
+    }
+
     static void dbg(String fmt, Object... args) {
         if (debugHoles) GunFeel.LOGGER.info("[holedebug] " + fmt, args);
     }
@@ -897,7 +901,9 @@ public final class Tracers {
         double through = shape == null ? throughMachine(level, hit.getLocation(), dir, hitState) : 0.0;
         AABB around = cell.inflate(1.0);
         if (through > 1.0) around = around.minmax(new AABB(hit.getLocation(), hit.getLocation().add(dir.normalize().scale(through))).inflate(1.0));
+        long st0 = System.nanoTime();
         List<RenderedMesh.Tri> tris = new ArrayList<>(RenderedMesh.within(level, around));
+        long st1 = System.nanoTime();
         boolean drawn = false;
         for (RenderedMesh.Tri t : tris) if (t.meets(cell)) {
             drawn = true;
@@ -906,6 +912,7 @@ public final class Tracers {
         boolean[] reaches = {false};
         java.util.Set<RenderedMesh.Tri> plain = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
         tris.addAll(RenderedMesh.models(level, around, pos, cell, reaches, plain));
+        long st2 = System.nanoTime();
         // blocks whose holes cover their whole face (glass: its clear pixels are glass too)
         Map<BlockPos, Boolean> whole = new HashMap<>();
         for (int i = 0; i < tris.size(); i++) {
@@ -938,6 +945,7 @@ public final class Tracers {
             best = k;
             met = t;
         }
+        long st3 = System.nanoTime();
         if (debugHoles) debugCandidates(tris, plain, o, d, reachTo, shape, pos, drawn, reaches[0], met, best);
         if (met == null) return drawn || reaches[0];
         Vector3d normal = met.normal();
@@ -969,7 +977,7 @@ public final class Tracers {
         }
         // solid faces first: a see-through face over one in the same plane (grass's side overlay) adds nothing
         pieces.sort(java.util.Comparator.comparing(pc -> pc.tri().tex().seeThrough()));
-        long born = System.nanoTime();
+        long born = System.nanoTime(), st4 = born, hideNs = 0;
         // pieces grouped by what they go with (a block, a renderer's part) and by plane: each group is one hole,
         // facing its own way
         Map<Object, Group> groups = new java.util.LinkedHashMap<>();
@@ -986,10 +994,12 @@ public final class Tracers {
             boolean elsewhere = pc.tri().block() != null && !pc.tri().block().equals(pos);
             double[] cen = centroid(pc.poly());
             boolean shown = false;
+            long sh0 = System.nanoTime();
             for (int s = 0; s <= pc.poly().size() && !shown; s++) {
                 double[] sm = s == 0 ? cen : lerp(pc.poly().get(s - 1), cen, 0.2);
                 shown = !hidden(near, pc, sm);
             }
+            hideNs += System.nanoTime() - sh0;
             if (!shown) {
                 hiddenPieces++;
                 continue;
@@ -1049,6 +1059,7 @@ public final class Tracers {
             }
             polyCount += g.polys().size() - before;
         }
+        long st5 = System.nanoTime();
         Vec3 hitAt = new Vec3(world.x, world.y, world.z);
         for (Group g : groups.values()) {
             if (g.polys().isEmpty()) continue;
@@ -1101,7 +1112,9 @@ public final class Tracers {
                 hiddenPieces, groups.size(), polyCount);
         trimHoles();
         long took = System.nanoTime() - started;
-        if (took > 3_000_000L) GunFeel.LOGGER.info("Bullet hole on {} took {} ms (shadow {} ms): {} triangles near, {} pieces, {} polygons", level.getBlockState(pos), took / 1_000_000L, shadeNs / 1_000_000L, near.size(), pieces.size(), polyCount);
+        if (took > 3_000_000L) GunFeel.LOGGER.info("Bullet hole on {} took {} ms: renderers {}, block models {}, hit point {}, pieces {}, hidden test {}, shadow {}, cells {}, meshes {} ({} triangles, {} near, {} pieces, {} polygons)",
+                level.getBlockState(pos), took / 1_000_000L, ms(st1 - st0), ms(st2 - st1), ms(st3 - st2), ms(st4 - st3), ms(hideNs), ms(shadeNs),
+                ms(st5 - st4 - hideNs - shadeNs), ms(System.nanoTime() - st5), tris.size(), near.size(), pieces.size(), polyCount);
         return true;
     }
 
