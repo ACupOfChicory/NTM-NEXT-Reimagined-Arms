@@ -84,7 +84,7 @@ public final class Hud {
         int smallX = right - smallW;
         if (small != null) g.text(font, small, smallX, top + 2, GREY, true);
         if (icon != null && !icon.isEmpty()) g.item(icon, smallX, top + 12);
-        if (AmmoLock.locked(stack)) lock(g, smallX + 18, top + 17);
+        if (AmmoLock.locked(stack)) lock(g, smallX + 12, top + 21); // on the icon's lower right corner
 
         // big magazine count at 2x, leading zeros dimmed
         int bigW = font.width(big) * 2;
@@ -126,6 +126,7 @@ public final class Hud {
 
     // the ammo lock: a small grey padlock (5 x 7), with a shadow
     private static void lock(GuiGraphicsExtractor g, int x, int y) {
+        g.nextStratum(); // above the item icon
         for (int pass = 0; pass < 2; pass++) {
             int o = pass == 0 ? 1 : 0, c = pass == 0 ? 0x80000000 : 0xFFA0A0A0;
             g.fill(x + 1 + o, y + o, x + 4 + o, y + 1 + o, c); // shackle top
