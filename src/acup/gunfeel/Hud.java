@@ -61,14 +61,21 @@ public final class Hud {
         int top = bottom - 30;
         String big, small = null;
         boolean low;
+        ItemStack icon = mag.getIconForHUD(stack, player);
         if (mag instanceof MagazineSingleTypeBase single) {
             int amount = single.getAmount(stack, inv);
             int capacity = single.getCapacity(stack);
             big = String.format("%03d", Math.min(amount, 999));
-            small = String.format("%04d", Math.min(reserve(single, stack, inv), 9999));
+            BulletConfig type = reserveType(single, stack, inv);
+            int reserve = reserve(type, inv);
+            small = reserve == INFINITE ? "\u221E" : String.format("%04d", Math.min(reserve, 9999));
             low = capacity > 0 && amount <= Math.max(1, capacity / 4);
+            // an empty magazine, not locked, loads what is found first: its icon
+            if (type != null && amount == 0 && type.ammoStack() != null && !type.ammoStack().isEmpty()) icon = type.ammoStack();
         } else {
-            big = mag.reportAmmoStateForHUD(stack, player);
+            // a belt off the inventory: an infinite ammo bag with its ammo counts 9999
+            big = mag instanceof com.hbm.items.weapon.sedna.mags.MagazineBelt && mag.getAmount(stack, inv) >= 9999 ? "\u221E"
+                    : mag.reportAmmoStateForHUD(stack, player);
             low = false;
         }
 
@@ -76,7 +83,6 @@ public final class Hud {
         int smallW = small == null ? 16 : Math.max(16, font.width(small));
         int smallX = right - smallW;
         if (small != null) g.text(font, small, smallX, top + 2, GREY, true);
-        ItemStack icon = mag.getIconForHUD(stack, player);
         if (icon != null && !icon.isEmpty()) g.item(icon, smallX, top + 12);
         if (AmmoLock.locked(stack)) lock(g, smallX + 18, top + 17);
 
@@ -130,15 +136,31 @@ public final class Hud {
         g.fill(x + 2, y + 4, x + 3, y + 6, 0xFF505050); // keyhole
     }
 
-    private static int reserve(MagazineSingleTypeBase mag, ItemStack gun, Inventory inv) {
-        BulletConfig type = mag.getType(gun, inv);
+    private static final int INFINITE = -1;
+
+    // the ammo the reserve counts: the magazine's type, or for an empty one not locked what a reload finds first
+    private static BulletConfig reserveType(MagazineSingleTypeBase mag, ItemStack gun, Inventory inv) {
+        BulletConfig type = mag.getAmount(gun, inv) == 0 && !AmmoLock.locked(gun) ? mag.getFirstConfig(gun, inv) : null;
+        return type != null ? type : mag.getType(gun, inv);
+    }
+
+    // rounds of that ammo in the inventory and its ammo bags; INFINITE when an infinite bag holds it
+    private static int reserve(BulletConfig type, Inventory inv) {
         if (type == null) return 0;
-        ItemStack ammo = type.ammoStack();
-        if (ammo == null || ammo.isEmpty()) return 0;
         int n = 0;
         for (int i = 0; i < inv.getContainerSize(); i++) {
             ItemStack s = inv.getItem(i);
-            if (!s.isEmpty() && ItemStack.isSameItemSameComponents(s, ammo)) n += s.getCount();
+            if (s.isEmpty()) continue;
+            if (type.matchesAmmo(s)) n += s.getCount();
+            var bag = IMagazine.ammoBag(s);
+            if (bag == null) continue;
+            boolean infinite = IMagazine.isInfiniteBag(s);
+            for (int j = 0; j < bag.getContainerSize(); j++) {
+                ItemStack in = bag.getItem(j);
+                if (in.isEmpty() || !type.matchesAmmo(in)) continue;
+                if (infinite) return INFINITE;
+                n += in.getCount();
+            }
         }
         return n;
     }
