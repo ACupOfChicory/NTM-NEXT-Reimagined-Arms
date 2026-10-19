@@ -266,11 +266,12 @@ public final class RadialMenu {
         }
         for (int i = 0; i < n; i++) {
             float[] p = entry(f, i, 42 + 5 * h[i], .25F, i == f.cur ? f.acc : 0xEBEBEB, "", 1);
-            if (i == f.cur) { // the loaded type: four corners round its icon and count, upright
+            if (i == f.cur) { // the loaded type: four corners round its icon (entry: centre y - 4 - 2h, 16 px x 1 + .25h), upright
                 int col = c(f.acc, f.in[i], f);
-                float x = p[0], t = p[1] - 14 - 2 * h[i], b = p[1] + 16 + 3 * h[i];
+                float half = 8 * (1 + .25F * h[i]) * (.6F + .4F * f.in[i]) + 2.5F, cy = p[1] - 4 - 2 * h[i];
+                float x = p[0], t = cy - half, b = cy + half;
                 for (int sgn = -1; sgn <= 1; sgn += 2) {
-                    float cx = x + 11 * sgn;
+                    float cx = x + half * sgn;
                     sh.line(cx, t, cx, t + 4, 1, col);
                     sh.line(cx + .5F * sgn, t, cx - 4 * sgn, t, 1, col);
                     sh.line(cx, b, cx, b - 4, 1, col);
