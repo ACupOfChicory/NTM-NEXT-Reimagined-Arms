@@ -80,7 +80,8 @@ public final class Hud {
         }
 
         // ammo icon and reserve, right-aligned
-        int smallW = small == null ? 16 : Math.max(16, font.width(small));
+        // a fixed column (as wide as "0000"), so a short ∞ or a belt without reserve does not move the icon and padlock
+        int smallW = Math.max(16, font.width("0000"));
         int smallX = right - smallW;
         if (small != null) g.text(font, small, smallX, top + 2, GREY, true);
         if (icon != null && !icon.isEmpty()) g.item(icon, smallX, top + 12);
