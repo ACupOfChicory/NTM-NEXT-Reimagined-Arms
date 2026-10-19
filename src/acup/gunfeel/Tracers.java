@@ -1966,6 +1966,7 @@ public final class Tracers {
         long pf = Perf.start();
         if (lvl != null) follow(lvl, now);
         Perf.add(Perf.FOLLOW, pf);
+        long ps = Perf.start();
         batch(now, life);
         if (HOLES.isEmpty() || !Config.bulletHoles) return;
         // the rest (fading, on moving parts, on glass, holeCache off) sent this frame, sorted in one pass
@@ -1977,6 +1978,7 @@ public final class Tracers {
             if (groups[g] == null) groups[g] = new ArrayList<>();
             groups[g].add(h);
         }
+        Perf.add(Perf.SORT, ps);
         for (int group = 0; group < 4 * KINDS; group++) {
             int kind = group % KINDS;
             boolean late = (group / KINDS & 1) != 0, cull = (group / KINDS & 2) != 0;
@@ -2005,6 +2007,15 @@ public final class Tracers {
     // them, the clouds and rain behind the glass would cover the hole
     public static void afterWeather(net.neoforged.neoforge.client.event.RenderLevelStageEvent.AfterWeather event) {
         if (HOLES.isEmpty() || !Config.bulletHoles || shaderTransparency()) return;
+        long pl = Perf.start();
+        try {
+            lateHoles(event);
+        } finally {
+            Perf.add(Perf.LATE, pl);
+        }
+    }
+
+    private static void lateHoles(net.neoforged.neoforge.client.event.RenderLevelStageEvent.AfterWeather event) {
         Vec3 cam = event.getLevelRenderState().cameraRenderState.pos;
         long now = System.nanoTime();
         long life = (long) (Math.max(0.1F, Config.holeLife) * 1e9);
@@ -2052,6 +2063,9 @@ public final class Tracers {
             long pd = Perf.start();
             drawHoles(p, vc, list, cam, now, life);
             Perf.add(Perf.HOLE_DRAW, pd);
+            Perf.add(Perf.ONE, pd);
+            double fadeFrom = Math.max(0.0, life / 1e9 - 3.0);
+            for (Hole h : list) Perf.oneByOne(h.late() ? Perf.ON_GLASS : (now - h.born()) / 1e9 >= fadeFrom ? Perf.FADING : h.follow() != null ? Perf.MOVING : Perf.OTHER);
         };
     }
 
@@ -2282,8 +2296,10 @@ public final class Tracers {
             var indices = com.mojang.blaze3d.systems.RenderSystem.getSequentialBuffer(type.primitiveTopology());
             new net.minecraft.client.renderer.rendertype.PreparedRenderType(pr.pipeline(), pr.outputTarget(), transforms, pr.scissorState(), pr.textures())
                     .drawFromBuffer(b.vb, indices.getBuffer(b.count), indices.type(), 0, 0, b.count);
+            Perf.batched(b.holes.size());
         }
         Perf.add(Perf.HOLE_DRAW, pd);
+        Perf.add(Perf.BATCHES, pd);
     }
 
     private static void bake(Batch b) {
